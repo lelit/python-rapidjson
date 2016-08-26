@@ -176,7 +176,7 @@ def test_json_unicode_strings(name, serialize, deserialize):
 
 @pytest.mark.benchmark
 @pytest.mark.parametrize('name,serialize,deserialize', contenders)
-def test_json_scii_strings(name, serialize, deserialize):
+def test_json_ascii_strings(name, serialize, deserialize):
     print("\nArray with 256 ascii strings:")
     ser_data, des_data = run_client_test(
         name, serialize, deserialize,
