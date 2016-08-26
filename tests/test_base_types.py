@@ -8,7 +8,7 @@ import random
 @pytest.mark.parametrize(
     'value', [
         'A', 1, -1, 2.3, {'foo': 'bar'}, [1, 2, 'a', 1.2, {'foo': 'bar'},],
-        sys.maxsize
+        sys.maxsize, sys.maxsize**2
 ])
 def test_base_values(value):
     dumped = rapidjson.dumps(value)

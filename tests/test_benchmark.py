@@ -86,20 +86,13 @@ if json:
 
 if rapidjson:
     contenders.append(
-        ('rapidjson', rapidjson.dumps,
-         partial(rapidjson.loads, precise_float=True))
+        ('rapidjson', rapidjson.dumps, rapidjson.loads)
     )
 
 if ujson:
     contenders.append(
         ('ujson', ujson.dumps, partial(ujson.loads, precise_float=True))
     )
-
-unprecise_rapid = (
-    'rapidjson (not precise)',
-    rapidjson.dumps,
-    partial(rapidjson.loads, precise_float=False)
-)
 
 unprecise_ujson = (
     'ujson (not precise)',
@@ -149,7 +142,7 @@ def test_json_serialization(name, serialize, deserialize):
 @pytest.mark.benchmark
 @pytest.mark.parametrize(
     'name,serialize,deserialize',
-    contenders + [unprecise_ujson, unprecise_rapid]
+    contenders + [unprecise_ujson]
 )
 def test_json_doubles(name, serialize, deserialize):
     print("\nArray with 256 doubles:")
@@ -256,39 +249,4 @@ def test_json_medium_complex_objects(name, serialize, deserialize):
         name, ser_data, des_data, ser_data + des_data
     )
 
-    print(msg)
-
-
-@pytest.mark.benchmark
-def test_double_performance_float_precision():
-    from functools import partial
-
-    print("\nArray with 256 doubles:")
-    name = 'rapidjson (precise)'
-    serialize = rapidjson.dumps
-    deserialize = rapidjson.loads
-
-    ser_data, des_data = run_client_test(
-        name, serialize, deserialize,
-        data=doubles,
-        iterations=50000,
-    )
-    msg = "%-11s serialize: %0.3f  deserialize: %0.3f  total: %0.3f" % (
-        name, ser_data, des_data, ser_data + des_data
-    )
-
-    print(msg)
-
-    name = 'rapidjson (not precise)'
-    serialize = rapidjson.dumps
-    deserialize = partial(rapidjson.loads, precise_float=False)
-
-    ser_data, des_data = run_client_test(
-        name, serialize, deserialize,
-        data=doubles,
-        iterations=50000,
-    )
-    msg = "%-11s serialize: %0.3f  deserialize: %0.3f  total: %0.3f" % (
-        name, ser_data, des_data, ser_data + des_data
-    )
     print(msg)
