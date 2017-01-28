@@ -15,6 +15,7 @@
 #include "docstrings.h"
 #include "version.h"
 
+
 using namespace rapidjson;
 
 
@@ -23,12 +24,14 @@ static PyObject* rapidjson_timezone_type = NULL;
 static PyObject* rapidjson_timezone_utc = NULL;
 static PyObject* rapidjson_uuid_type = NULL;
 
+
 struct HandlerContext {
     PyObject* object;
     const char* key;
     SizeType keyLength;
     bool isObject;
 };
+
 
 enum DatetimeMode {
     DATETIME_MODE_NONE = 0,
@@ -49,6 +52,7 @@ days_per_month(int year, int month) {
     else
         return 28;
 }
+
 
 enum UuidMode {
     UUID_MODE_NONE = 0,
@@ -219,7 +223,8 @@ struct PyHandler {
 
     bool NaN() {
         if (!allowNan) {
-            PyErr_SetString(PyExc_ValueError, "Out of range float values are not JSON compliant");
+            PyErr_SetString(PyExc_ValueError,
+                            "Out of range float values are not JSON compliant");
             return false;
         }
 
@@ -243,7 +248,8 @@ struct PyHandler {
 
     bool Infinity(bool minus) {
         if (!allowNan) {
-            PyErr_SetString(PyExc_ValueError, "Out of range float values are not JSON compliant");
+            PyErr_SetString(PyExc_ValueError,
+                            "Out of range float values are not JSON compliant");
             return false;
         }
 
@@ -710,6 +716,7 @@ struct PyHandler {
     }
 };
 
+
 static PyObject*
 rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
 {
@@ -773,7 +780,8 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
     if (datetimeModeObj) {
         if (PyLong_Check(datetimeModeObj)) {
             datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
-            if (datetimeMode < DATETIME_MODE_NONE || datetimeMode > DATETIME_MODE_ISO8601_UTC) {
+            if (datetimeMode < DATETIME_MODE_NONE
+                || datetimeMode > DATETIME_MODE_ISO8601_UTC) {
                 PyErr_SetString(PyExc_ValueError, "Invalid datetime_mode");
                 return NULL;
             }
@@ -849,6 +857,7 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
     return handler.root;
 }
 
+
 struct WriterContext {
     const char* key;
     Py_ssize_t size;
@@ -861,6 +870,7 @@ struct WriterContext {
     : key(k), size(s), object(o), decref(d), level(l), isObject(isO)
     {}
 };
+
 
 struct DictItem {
     char* key_str;
@@ -875,6 +885,7 @@ struct DictItem {
         return strcmp(other.key_str, this->key_str) < 0;
     }
 };
+
 
 static const int MAX_RECURSION_DEPTH = 2048;
 
@@ -934,7 +945,8 @@ rapidjson_dumps_internal(
         else if (PyBool_Check(object)) {
             writer->Bool(object == Py_True);
         }
-        else if (useDecimal && (isDec = PyObject_IsInstance(object, rapidjson_decimal_type))) {
+        else if (useDecimal
+                 && (isDec = PyObject_IsInstance(object, rapidjson_decimal_type))) {
             if (isDec == -1)
                 return NULL;
 
@@ -993,12 +1005,14 @@ rapidjson_dumps_internal(
                 if (allowNan)
                     writer->RawValue("NaN", 3, kNumberType);
                 else {
-                    PyErr_SetString(PyExc_ValueError, "Out of range float values are not JSON compliant");
+                    PyErr_SetString(PyExc_ValueError,
+                                    "Out of range float values are not JSON compliant");
                     return NULL;
                 }
             } else if (Py_IS_INFINITY(d)) {
                 if (!allowNan) {
-                    PyErr_SetString(PyExc_ValueError, "Out of range float values are not JSON compliant");
+                    PyErr_SetString(PyExc_ValueError,
+                                    "Out of range float values are not JSON compliant");
                     return NULL;
                 }
                 else if (d < 0)
@@ -1087,7 +1101,8 @@ rapidjson_dumps_internal(
                 std::vector<DictItem>::const_iterator iter = items.begin();
                 for (; iter != items.end(); ++iter) {
                     stack.push_back(WriterContext(NULL, 0, iter->item, false, nextLevel));
-                    stack.push_back(WriterContext(iter->key_str, iter->key_size, NULL, false, nextLevel));
+                    stack.push_back(WriterContext(iter->key_str, iter->key_size,
+                                                  NULL, false, nextLevel));
                 }
             }
         }
@@ -1112,8 +1127,10 @@ rapidjson_dumps_internal(
                     goto error;
 
                 if (utcOffset != Py_None) {
-                    if (datetimeMode == DATETIME_MODE_ISO8601_UTC && PyObject_IsTrue(utcOffset)) {
-                        asUTC = PyObject_CallMethod(object, "astimezone", "O", rapidjson_timezone_utc);
+                    if (datetimeMode == DATETIME_MODE_ISO8601_UTC
+                        && PyObject_IsTrue(utcOffset)) {
+                        asUTC = PyObject_CallMethod(object, "astimezone",
+                                                    "O", rapidjson_timezone_utc);
 
                         if (asUTC == NULL) {
                             Py_DECREF(utcOffset);
@@ -1141,7 +1158,8 @@ rapidjson_dumps_internal(
                             int tz_hour = total_seconds / 3600;
                             int tz_min = (total_seconds % 3600) / 60;
 
-                            snprintf(timeZone, TIMEZONE_LEN-1, "%c%02d:%02d", sign, tz_hour, tz_min);
+                            snprintf(timeZone, TIMEZONE_LEN-1, "%c%02d:%02d",
+                                     sign, tz_hour, tz_min);
                         }
 
                         Py_XDECREF(daysObj);
@@ -1337,7 +1355,8 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
     if (datetimeModeObj) {
         if (PyLong_Check(datetimeModeObj)) {
             datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
-            if (datetimeMode < DATETIME_MODE_NONE || datetimeMode > DATETIME_MODE_ISO8601_UTC) {
+            if (datetimeMode < DATETIME_MODE_NONE
+                || datetimeMode > DATETIME_MODE_ISO8601_UTC) {
                 PyErr_SetString(PyExc_ValueError, "Invalid datetime_mode");
                 return NULL;
             }
@@ -1389,13 +1408,15 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
 }
 
 
-
 static PyMethodDef
 rapidjson_functions[] = {
-    {"loads", (PyCFunction) rapidjson_loads, METH_VARARGS | METH_KEYWORDS, rapidjson_loads_docstring},
-    {"dumps", (PyCFunction) rapidjson_dumps, METH_VARARGS | METH_KEYWORDS, rapidjson_dumps_docstring},
+    {"loads", (PyCFunction) rapidjson_loads, METH_VARARGS | METH_KEYWORDS,
+     rapidjson_loads_docstring},
+    {"dumps", (PyCFunction) rapidjson_dumps, METH_VARARGS | METH_KEYWORDS,
+     rapidjson_dumps_docstring},
     {NULL, NULL, 0, NULL} /* sentinel */
 };
+
 
 static PyModuleDef rapidjson_module = {
     PyModuleDef_HEAD_INIT,
@@ -1404,6 +1425,7 @@ static PyModuleDef rapidjson_module = {
     -1,
     rapidjson_functions
 };
+
 
 PyMODINIT_FUNC
 PyInit_rapidjson()
@@ -1473,8 +1495,10 @@ PyInit_rapidjson()
 
     PyModule_AddIntConstant(module, "DATETIME_MODE_NONE", DATETIME_MODE_NONE);
     PyModule_AddIntConstant(module, "DATETIME_MODE_ISO8601", DATETIME_MODE_ISO8601);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_ISO8601_IGNORE_TZ", DATETIME_MODE_ISO8601_IGNORE_TZ);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_ISO8601_UTC", DATETIME_MODE_ISO8601_UTC);
+    PyModule_AddIntConstant(module, "DATETIME_MODE_ISO8601_IGNORE_TZ",
+                            DATETIME_MODE_ISO8601_IGNORE_TZ);
+    PyModule_AddIntConstant(module, "DATETIME_MODE_ISO8601_UTC",
+                            DATETIME_MODE_ISO8601_UTC);
 
     PyModule_AddIntConstant(module, "UUID_MODE_NONE", UUID_MODE_NONE);
     PyModule_AddIntConstant(module, "UUID_MODE_HEX", UUID_MODE_HEX);

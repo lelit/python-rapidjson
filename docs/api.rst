@@ -14,41 +14,43 @@
 
 .. data:: DATETIME_MODE_NONE = 0
 
-   This is the default ``datetime_mode``: *neither* :class:`datetime` *nor* :class:`date`
-   instances are recognized by :func:`dumps` and :func:`loads`.
+   This is the default ``datetime_mode``: *neither* :class:`datetime` *nor*
+   :class:`date` instances are recognized by :func:`dumps` and :func:`loads`.
 
 .. data:: DATETIME_MODE_ISO8601 = 1
 
-   In this ``datetime_mode`` mode :func:`dumps` and :func:`loads` handle :class:`datetime`
-   *and* :class:`date` instances representing those values using the `ISO 8601`_ format.
+   In this ``datetime_mode`` mode :func:`dumps` and :func:`loads` handle
+   :class:`datetime` *and* :class:`date` instances representing those values
+   using the `ISO 8601`_ format.
 
 .. data:: DATETIME_MODE_ISO8601_IGNORE_TZ = 2
 
-   This is like :data:`DATETIME_MODE_ISO8601` except that the value's timezone is ignored.
+   This is like :data:`DATETIME_MODE_ISO8601` except that the value's timezone
+   is ignored.
 
 .. data:: DATETIME_MODE_ISO8601_UTC = 3
 
-   This is like :data:`DATETIME_MODE_ISO8601` except that the times are always *shifted* to
-   the UTC_ timezone.
+   This is like :data:`DATETIME_MODE_ISO8601` except that the times are always
+   *shifted* to the UTC_ timezone.
 
 .. data:: UUID_MODE_NONE = 0
 
-   This is the default ``uuid_mode``: :class:`UUID` instances are *not* recognized by
-   :func:`dumps` and :func:`loads`.
+   This is the default ``uuid_mode``: :class:`UUID` instances are *not*
+   recognized by :func:`dumps` and :func:`loads`.
 
 .. data:: UUID_MODE_CANONICAL = 1
 
-   In this ``uuid_mode``, :func:`loads` recognizes string values containing the
-   ``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`` canonical representation as :class:`UUID`
-   instances; :func:`dumps` emits same kind of representation for :class:`UUID` instances as a
-   string value.
+   In this ``uuid_mode``, :func:`loads` recognizes string values containing
+   the ``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`` canonical representation as
+   :class:`UUID` instances; :func:`dumps` emits same kind of representation
+   for :class:`UUID` instances as a string value.
 
 .. data:: UUID_MODE_HEX = 2
 
-   In this ``uuid_mode`` :func:`loads` recognizes string values containing exactly 32 hex
-   digits *or* the ``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`` canonical representation as
-   :class:`UUID` instances; :func:`dumps` emits the 32 hex digits of :class:`UUID` instances as
-   a string value.
+   In this ``uuid_mode`` :func:`loads` recognizes string values containing
+   exactly 32 hex digits *or* the ``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx``
+   canonical representation as :class:`UUID` instances; :func:`dumps` emits
+   the 32 hex digits of :class:`UUID` instances as a string value.
 
 .. testsetup::
 
@@ -66,58 +68,59 @@
    :param bool allow_nan: whether ``NaN`` values are handled or not
    :param bool native_numbers: whether use arch's native numbers or not
    :param int indent: indentation width to produce pretty printed JSON
-   :param callable default: a function that gets called for objects that can't otherwise be
-                            serialized
+   :param callable default: a function that gets called for objects that can't
+                            otherwise be serialized
    :param bool sort_keys: whether dictionary keys should be sorted alphabetically
    :param bool use_decimal: whether :class:`Decimal` should be handled
    :param int max_recursion_depth: maximum depth for nested structures
-   :param int datetime_mode: how should :class:`datetime` and :class:`date` instances be
-                             handled
+   :param int datetime_mode: how should :class:`datetime` and :class:`date`
+                             instances be handled
    :param int uuid_mode: how should :class:`UUID` instances be handled
    :returns: A Python :class:`str` instance.
 
    Encode given Python `obj` instance into a JSON string.
 
-   If `skipkeys` is true (default: ``False``), then dict keys that are not of a basic type
-   (:class:`str`, :class:`int`, :class:`float`, :class:`bool`, ``None``) will be skipped
-   instead of raising a :exc:`TypeError`:
+   If `skipkeys` is true (default: ``False``), then dict keys that are not of
+   a basic type (:class:`str`, :class:`int`, :class:`float`, :class:`bool`,
+   ``None``) will be skipped instead of raising a :exc:`TypeError`:
 
    .. doctest::
 
-       >>> dumps({(0,): 'empty tuple'})
-       Traceback (most recent call last):
-         File "<stdin>", line 1, in <module>
-       TypeError: keys must be a string
-       >>> dumps({(0,): 'empty tuple'}, skipkeys=True)
-       '{}'
+      >>> dumps({(0,): 'empty tuple'})
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      TypeError: keys must be a string
+      >>> dumps({(0,): 'empty tuple'}, skipkeys=True)
+      '{}'
 
-   If `ensure_ascii` is true (the default), the output is guaranteed to have all incoming
-   non-ASCII characters escaped.  If `ensure_ascii` is false, these characters will be output
-   as-is:
-
-   .. doctest::
-
-       >>> dumps('The symbol for the Euro currency is €')
-       '"The symbol for the Euro currency is \\u20AC"'
-       >>> dumps('The symbol for the Euro currency is €',
-       ...       ensure_ascii=False)
-       '"The symbol for the Euro currency is €"'
-
-   If `allow_nan` is false (default: ``True``), then it will be a :exc:`ValueError` to
-   serialize out of range :class:`float` values (``nan``, ``inf``, ``-inf``) in strict
-   compliance of the JSON specification.  If `allow_nan` is true, their JavaScript equivalents
-   (``NaN``, ``Infinity``, ``-Infinity``) will be used:
+   If `ensure_ascii` is true (the default), the output is guaranteed to have
+   all incoming non-ASCII characters escaped.  If `ensure_ascii` is false,
+   these characters will be output as-is:
 
    .. doctest::
 
-       >>> nan = float('nan')
-       >>> inf = float('inf')
-       >>> dumps([nan, inf])
-       '[NaN,Infinity]'
-       >>> dumps([nan, inf], allow_nan=False)
-       Traceback (most recent call last):
-         File "<stdin>", line 1, in <module>
-       ValueError: Out of range float values are not JSON compliant
+      >>> dumps('The symbol for the Euro currency is €')
+      '"The symbol for the Euro currency is \\u20AC"'
+      >>> dumps('The symbol for the Euro currency is €',
+      ...       ensure_ascii=False)
+      '"The symbol for the Euro currency is €"'
+
+   If `allow_nan` is false (default: ``True``), then it will be a
+   :exc:`ValueError` to serialize out of range :class:`float` values (``nan``,
+   ``inf``, ``-inf``) in strict compliance of the JSON specification.  If
+   `allow_nan` is true, their JavaScript equivalents (``NaN``, ``Infinity``,
+   ``-Infinity``) will be used:
+
+   .. doctest::
+
+      >>> nan = float('nan')
+      >>> inf = float('inf')
+      >>> dumps([nan, inf])
+      '[NaN,Infinity]'
+      >>> dumps([nan, inf], allow_nan=False)
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      ValueError: Out of range float values are not JSON compliant
 
    If `native_numbers` is true (default: ``False``), then the numeric values (i.e. *floats* and
    *integers*) will be handled using architecture *native* arithmetic: while this is somewhat
@@ -285,10 +288,12 @@
                     native_numbers=False, datetime_mode=None, uuid_mode=None)
 
    :param str s: The JSON string to parse
-   :param callable object_hook: an optional function that will be called with the result of
-                                any object literal decoded (a :class:`dict`) and should return
-                                the value to use instead of the :class:`dict`
-   :param bool use_decimal: whether :class:`Decimal` should be used for float values
+   :param callable object_hook: an optional function that will be called with
+                                the result of any object literal decoded (a
+                                :class:`dict`) and should return the value to
+                                use instead of the :class:`dict`
+   :param bool use_decimal: whether :class:`Decimal` should be used for float
+                            values
    :param bool allow_nan: whether ``NaN`` values are recognized
    :param bool native_numbers: whether use arch's native numbers or not
    :param int datetime_mode: how should :class:`datetime` and :class:`date` instances be
@@ -296,49 +301,51 @@
    :param int uuid_mode: how should :class:`UUID` instances be handled
    :returns: An equivalent Python object.
 
-   Decode the given Python string `s` containing a JSON formatted value into Python object.
+   Decode the given Python string `s` containing a JSON formatted value into
+   Python object.
 
-   `object_hook` may be used to inject a custom deserializer that can replace any :class:`dict`
-   instance found in the JSON structure with a *derived* object instance:
-
-   .. doctest::
-
-       >>> class Point(object):
-       ...   def __init__(self, x, y):
-       ...     self.x = x
-       ...     self.y = y
-       ...   def __repr__(self):
-       ...     return 'Point(%s, %s)' % (self.x, self.y)
-       ...
-       >>> def point_dejsonifier(d):
-       ...   if 'x' in d and 'y' in d:
-       ...     return Point(d['x'], d['y'])
-       ...   else:
-       ...     return d
-       ...
-       >>> loads('{"x":1,"y":2}', object_hook=point_dejsonifier)
-       Point(1, 2)
-
-   If `use_decimal` is true (default: ``False``) then all floating point literals present in
-   the JSON structure will be returned as :class:`Decimal` instances instead of plain
-   :class:`float`:
+   `object_hook` may be used to inject a custom deserializer that can replace
+   any :class:`dict` instance found in the JSON structure with a *derived*
+   object instance:
 
    .. doctest::
 
-       >>> loads('1.2345', use_decimal=True)
-       Decimal('1.2345')
+      >>> class Point(object):
+      ...   def __init__(self, x, y):
+      ...     self.x = x
+      ...     self.y = y
+      ...   def __repr__(self):
+      ...     return 'Point(%s, %s)' % (self.x, self.y)
+      ...
+      >>> def point_dejsonifier(d):
+      ...   if 'x' in d and 'y' in d:
+      ...     return Point(d['x'], d['y'])
+      ...   else:
+      ...     return d
+      ...
+      >>> loads('{"x":1,"y":2}', object_hook=point_dejsonifier)
+      Point(1, 2)
 
-   If `allow_nan` is false (default: ``True``), then the values ``NaN`` and ``Infinity`` won't
-   be recognized:
+   If `use_decimal` is true (default: ``False``) then all floating point
+   literals present in the JSON structure will be returned as :class:`Decimal`
+   instances instead of plain :class:`float`:
 
    .. doctest::
 
-       >>> loads('[NaN, Infinity]')
-       [nan, inf]
-       >>> loads('[NaN, Infinity]', allow_nan=False)
-       Traceback (most recent call last):
-         File "<stdin>", line 1, in <module>
-       ValueError: … Out of range float values are not JSON compliant
+      >>> loads('1.2345', use_decimal=True)
+      Decimal('1.2345')
+
+   If `allow_nan` is false (default: ``True``), then the values ``NaN`` and
+   ``Infinity`` won't be recognized:
+
+   .. doctest::
+
+      >>> loads('[NaN, Infinity]')
+      [nan, inf]
+      >>> loads('[NaN, Infinity]', allow_nan=False)
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      ValueError: … Out of range float values are not JSON compliant
 
    If `native_numbers` is true (default: ``False``), then the numeric values (i.e. *floats* and
    *integers*) will be handled using architecture *native* arithmetic: while this is quite
