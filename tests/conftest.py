@@ -29,14 +29,16 @@ contenders.append(Contender('rapidjson',
                             rapidjson.dumps,
                             rapidjson.loads))
 contenders.append(Contender('rapidjson_nativenumbers',
-                            partial(rapidjson.dumps, native_numbers=True),
-                            partial(rapidjson.loads, native_numbers=True)))
+                            partial(rapidjson.dumps,
+                                    number_mode=rapidjson.NUMBER_MODE_NATIVE),
+                            partial(rapidjson.loads,
+                                    number_mode=rapidjson.NUMBER_MODE_NATIVE)))
 
 numbers_contenders = [
     Contender('Wide numbers', rapidjson.dumps, rapidjson.loads),
     Contender('Native numbers',
-              partial(rapidjson.dumps, native_numbers=True),
-              partial(rapidjson.loads, native_numbers=True))
+              partial(rapidjson.dumps, number_mode=rapidjson.NUMBER_MODE_NATIVE),
+              partial(rapidjson.loads, number_mode=rapidjson.NUMBER_MODE_NATIVE))
 ]
 
 try:

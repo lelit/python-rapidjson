@@ -60,16 +60,6 @@ def test_allow_nan():
 
 
 @pytest.mark.unit
-def test_native_numbers():
-    f = [-1, 1, 1.1, -2.2]
-    expected = '[-1,1,1.1,-2.2]'
-    assert rapidjson.dumps(f, native_numbers=True) == expected
-    assert rapidjson.dumps(f, native_numbers=False) == expected
-    assert rapidjson.loads(expected, native_numbers=True) == f
-    assert rapidjson.loads(expected, native_numbers=False) == f
-
-
-@pytest.mark.unit
 def test_indent():
     o = {"a": 1, "z": 2, "b": 3}
     expected1 = '{\n    "a": 1,\n    "z": 2,\n    "b": 3\n}'
@@ -379,6 +369,20 @@ def test_uuid_hex(value, cls):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize(
+    'mode', [
+        None,
+        rapidjson.NUMBER_MODE_NONE,
+        rapidjson.NUMBER_MODE_NATIVE
+    ])
+def test_number_mode(mode):
+    f = [-1, 1, 1.1, -2.2]
+    expected = '[-1,1,1.1,-2.2]'
+    assert rapidjson.dumps(f, number_mode=mode) == expected
+    assert rapidjson.loads(expected, number_mode=mode) == f
+
+
+@pytest.mark.unit
 def test_object_hook():
     class Foo:
         def __init__(self, foo):
@@ -414,11 +418,17 @@ def test_object_hook():
         ( ('{}',), { 'this_keyword_arg_shall_never_exist': True } ),
         ( ('[]',), { 'object_hook': True } ),
         ( ('[]',), { 'datetime_mode': 'no' } ),
+        ( ('[]',), { 'datetime_mode': 1.0 } ),
         ( ('[]',), { 'datetime_mode': -100 } ),
         ( ('[]',), { 'datetime_mode': 100 } ),
         ( ('[]',), { 'uuid_mode': 'no' } ),
+        ( ('[]',), { 'uuid_mode': 1.0 } ),
         ( ('[]',), { 'uuid_mode': -100 } ),
         ( ('[]',), { 'uuid_mode': 100 } ),
+        ( ('[]',), { 'number_mode': 'no' } ),
+        ( ('[]',), { 'number_mode': 1.0 } ),
+        ( ('[]',), { 'number_mode': -100 } ),
+        ( ('[]',), { 'number_mode': 100 } ),
     ))
 def test_invalid_loads_params(posargs, kwargs):
     try:
@@ -437,11 +447,17 @@ def test_invalid_loads_params(posargs, kwargs):
         ( ([],), { 'default': True } ),
         ( ([],), { 'indent': -1 }),
         ( ([],), { 'datetime_mode': 'no' } ),
+        ( ([],), { 'datetime_mode': 1.0 } ),
         ( ([],), { 'datetime_mode': -100 } ),
         ( ([],), { 'datetime_mode': 100 } ),
         ( ([],), { 'uuid_mode': 'no' } ),
+        ( ([],), { 'uuid_mode': 1.0 } ),
         ( ([],), { 'uuid_mode': -100 } ),
         ( ([],), { 'uuid_mode': 100 } ),
+        ( ([],), { 'number_mode': 'no' } ),
+        ( ([],), { 'number_mode': 1.0 } ),
+        ( ([],), { 'number_mode': -100 } ),
+        ( ([],), { 'number_mode': 100 } ),
     ))
 def test_invalid_dumps_params(posargs, kwargs):
     try:

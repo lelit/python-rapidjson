@@ -40,6 +40,7 @@ enum DatetimeMode {
     DATETIME_MODE_ISO8601_UTC = 3
 };
 
+
 static int
 days_per_month(int year, int month) {
     if (month == 1 || month == 3 || month == 5 || month == 7
@@ -59,6 +60,27 @@ enum UuidMode {
     UUID_MODE_CANONICAL = 1, // only 4-dashed 32 hex chars: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     UUID_MODE_HEX = 2        // canonical OR 32 hex chars
 };
+
+
+enum NumberMode {
+    NUMBER_MODE_NONE = 0,
+    NUMBER_MODE_NATIVE = 1
+};
+
+
+// Module-wide defaults
+
+static int defaultUseDecimal = 0;
+static int defaultAllowNan = 1;
+static PyObject* defaultObjectHook = NULL;
+static DatetimeMode defaultDatetimeMode = DATETIME_MODE_NONE;
+static UuidMode defaultUuidMode = UUID_MODE_NONE;
+static NumberMode defaultNumberMode = NUMBER_MODE_NONE;
+static int defaultSkipKeys = 0;
+static int defaultEnsureAscii = 1;
+static int defaultSortKeys = 0;
+static long defaultIndent = -1;
+static PyObject* defaultDefaultFn = NULL;
 
 struct PyHandler {
     int useDecimal;
@@ -723,40 +745,47 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
     /* Converts a JSON encoded string to a Python object. */
 
     PyObject* jsonObject;
-    PyObject* objectHook = NULL;
-    int useDecimal = 0;
-    int allowNan = 1;
-    int nativeNumbers = 0;
+    PyObject* objectHook = defaultObjectHook;
+    PyObject* useDecimalObj = NULL;
+    int useDecimal = defaultUseDecimal;
+    PyObject* allowNanObj = NULL;
+    int allowNan = defaultAllowNan;
     PyObject* datetimeModeObj = NULL;
-    DatetimeMode datetimeMode = DATETIME_MODE_NONE;
+    DatetimeMode datetimeMode = defaultDatetimeMode;
     PyObject* uuidModeObj = NULL;
-    UuidMode uuidMode = UUID_MODE_NONE;
+    UuidMode uuidMode = defaultUuidMode;
+    PyObject* numberModeObj = NULL;
+    NumberMode numberMode = defaultNumberMode;
 
     static char const * kwlist[] = {
         "s",
         "object_hook",
         "use_decimal",
         "allow_nan",
-        "native_numbers",
         "datetime_mode",
         "uuid_mode",
+        "number_mode",
         NULL
     };
 
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OpppOO:rapidjson.loads",
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOOOO:rapidjson.loads",
                                      (char **) kwlist,
                                      &jsonObject,
                                      &objectHook,
-                                     &useDecimal,
-                                     &allowNan,
-                                     &nativeNumbers,
+                                     &useDecimalObj,
+                                     &allowNanObj,
                                      &datetimeModeObj,
-                                     &uuidModeObj))
+                                     &uuidModeObj,
+                                     &numberModeObj))
         return NULL;
 
-    if (objectHook && !PyCallable_Check(objectHook)) {
-        PyErr_SetString(PyExc_TypeError, "object_hook is not callable");
-        return NULL;
+    if (objectHook) {
+        if (objectHook == Py_None)
+            objectHook = NULL;
+        else if (!PyCallable_Check(objectHook)) {
+            PyErr_SetString(PyExc_TypeError, "object_hook must be a callable or None");
+            return NULL;
+        }
     }
 
     Py_ssize_t jsonStrLen;
@@ -777,8 +806,34 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
         return NULL;
     }
 
+    if (useDecimalObj) {
+        if (useDecimalObj == Py_None)
+            useDecimal = 0;
+        else if (PyBool_Check(useDecimalObj))
+            useDecimal = PyObject_IsTrue(useDecimalObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "use_decimal must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (allowNanObj) {
+        if (allowNanObj == Py_None)
+            allowNan = 1;
+        else if (PyBool_Check(allowNanObj))
+            allowNan = PyObject_IsTrue(allowNanObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "allow_nan must be a bool value or None");
+            return NULL;
+        }
+    }
+
     if (datetimeModeObj) {
-        if (PyLong_Check(datetimeModeObj)) {
+        if (datetimeModeObj == Py_None)
+            datetimeMode = DATETIME_MODE_NONE;
+        else if (PyLong_Check(datetimeModeObj)) {
             datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
             if (datetimeMode < DATETIME_MODE_NONE
                 || datetimeMode > DATETIME_MODE_ISO8601_UTC) {
@@ -787,13 +842,16 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
             }
         }
         else {
-            PyErr_SetString(PyExc_TypeError, "datetime_mode must be an integer value");
+            PyErr_SetString(PyExc_TypeError,
+                            "datetime_mode must be an integer value or None");
             return NULL;
         }
     }
 
     if (uuidModeObj) {
-        if (PyLong_Check(uuidModeObj)) {
+        if (uuidModeObj == Py_None)
+            uuidMode = UUID_MODE_NONE;
+        else if (PyLong_Check(uuidModeObj)) {
             uuidMode = (UuidMode) PyLong_AsLong(uuidModeObj);
             if (uuidMode < UUID_MODE_NONE || uuidMode > UUID_MODE_HEX) {
                 PyErr_SetString(PyExc_ValueError, "Invalid uuid_mode");
@@ -801,7 +859,25 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
             }
         }
         else {
-            PyErr_SetString(PyExc_TypeError, "uuid_mode must be an integer value");
+            PyErr_SetString(PyExc_TypeError,
+                            "uuid_mode must be an integer value or None");
+            return NULL;
+        }
+    }
+
+    if (numberModeObj) {
+        if (numberModeObj == Py_None)
+            numberMode = NUMBER_MODE_NONE;
+        else if (PyLong_Check(numberModeObj)) {
+            numberMode = (NumberMode) PyLong_AsLong(numberModeObj);
+            if (numberMode < NUMBER_MODE_NONE || numberMode > NUMBER_MODE_NATIVE) {
+                PyErr_SetString(PyExc_ValueError, "Invalid number_mode");
+                return NULL;
+            }
+        }
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "number_mode must be an integer value or None");
             return NULL;
         }
     }
@@ -809,12 +885,15 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
     char* jsonStrCopy = (char*) malloc(sizeof(char) * (jsonStrLen+1));
     memcpy(jsonStrCopy, jsonStr, jsonStrLen+1);
 
+    if (defaultObjectHook)
+        Py_INCREF(defaultObjectHook);
+
     PyHandler handler(useDecimal, objectHook, allowNan, datetimeMode, uuidMode);
     Reader reader;
     InsituStringStream ss(jsonStrCopy);
 
     if (allowNan)
-        if (nativeNumbers)
+        if (numberMode == NUMBER_MODE_NATIVE)
             reader.Parse<kParseInsituFlag |
                          kParseNanAndInfFlag>(ss, handler);
         else
@@ -822,10 +901,12 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
                          kParseNumbersAsStringsFlag |
                          kParseNanAndInfFlag>(ss, handler);
     else
-        if (nativeNumbers)
+        if (numberMode == NUMBER_MODE_NATIVE)
             reader.Parse<kParseInsituFlag>(ss, handler);
         else
             reader.Parse<kParseInsituFlag | kParseNumbersAsStringsFlag>(ss, handler);
+
+    Py_XDECREF(defaultObjectHook);
 
     if (reader.HasParseError()) {
         SizeType offset = reader.GetErrorOffset();
@@ -898,13 +979,13 @@ rapidjson_dumps_internal(
     PyObject* value,
     int skipKeys,
     int allowNan,
-    int nativeNumbers,
     PyObject* defaultFn,
     int sortKeys,
     int useDecimal,
     unsigned maxRecursionDepth,
     DatetimeMode datetimeMode,
-    UuidMode uuidMode)
+    UuidMode uuidMode,
+    NumberMode numberMode)
 {
     int isDec;
     std::vector<WriterContext> stack;
@@ -965,7 +1046,7 @@ rapidjson_dumps_internal(
             Py_DECREF(decStrObj);
         }
         else if (PyLong_Check(object)) {
-            if (nativeNumbers) {
+            if (numberMode == NUMBER_MODE_NATIVE) {
                 int overflow;
                 long long i = PyLong_AsLongLongAndOverflow(object, &overflow);
                 if (i == -1 && PyErr_Occurred())
@@ -1271,13 +1352,13 @@ error:
         value, \
         skipKeys, \
         allowNan, \
-        nativeNumbers, \
         defaultFn, \
         sortKeys, \
         useDecimal, \
         maxRecursionDepth, \
         datetimeMode, \
-        uuidMode)
+        uuidMode, \
+        numberMode)
 
 
 static PyObject*
@@ -1286,30 +1367,34 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
     /* Converts a Python object to a JSON-encoded string. */
 
     PyObject* value;
-    int skipKeys = 0;
-    int ensureAscii = 1;
-    int allowNan = 1;
-    int nativeNumbers = 0;
+    PyObject* skipKeysObj = NULL;
+    int skipKeys = defaultSkipKeys;
+    PyObject* ensureAsciiObj = NULL;
+    int ensureAscii = defaultEnsureAscii;
+    PyObject* allowNanObj = NULL;
+    int allowNan = defaultAllowNan;
     PyObject* indent = NULL;
-    PyObject* defaultFn = NULL;
-    int sortKeys = 0;
-    int useDecimal = 0;
+    long indentCharCount = defaultIndent;
+    bool prettyPrint = defaultIndent != -1;
+    const char indentChar = ' ';
+    PyObject* defaultFn = defaultDefaultFn;
+    PyObject* sortKeysObj = NULL;
+    int sortKeys = defaultSortKeys;
+    PyObject* useDecimalObj = NULL;
+    int useDecimal = defaultUseDecimal;
     unsigned maxRecursionDepth = MAX_RECURSION_DEPTH;
     PyObject* datetimeModeObj = NULL;
-    DatetimeMode datetimeMode = DATETIME_MODE_NONE;
+    DatetimeMode datetimeMode = defaultDatetimeMode;
     PyObject* uuidModeObj = NULL;
-    UuidMode uuidMode = UUID_MODE_NONE;
-
-    bool prettyPrint = false;
-    const char indentChar = ' ';
-    unsigned indentCharCount = 4;
+    UuidMode uuidMode = defaultUuidMode;
+    PyObject* numberModeObj = NULL;
+    NumberMode numberMode = defaultNumberMode;
 
     static char const * kwlist[] = {
         "obj",
         "skipkeys",
         "ensure_ascii",
         "allow_nan",
-        "native_numbers",
         "indent",
         "default",
         "sort_keys",
@@ -1317,43 +1402,111 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
         "max_recursion_depth",
         "datetime_mode",
         "uuid_mode",
+        "number_mode",
         NULL
     };
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|ppppOOppIOO:rapidjson.dumps",
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "O|OOOOOOOIOOO:rapidjson.dumps",
                                      (char **) kwlist,
                                      &value,
-                                     &skipKeys,
-                                     &ensureAscii,
-                                     &allowNan,
-                                     &nativeNumbers,
+                                     &skipKeysObj,
+                                     &ensureAsciiObj,
+                                     &allowNanObj,
                                      &indent,
                                      &defaultFn,
-                                     &sortKeys,
-                                     &useDecimal,
+                                     &sortKeysObj,
+                                     &useDecimalObj,
                                      &maxRecursionDepth,
                                      &datetimeModeObj,
-                                     &uuidModeObj))
+                                     &uuidModeObj,
+                                     &numberModeObj))
         return NULL;
 
-    if (defaultFn && !PyCallable_Check(defaultFn)) {
-        PyErr_SetString(PyExc_TypeError, "default must be a callable");
-        return NULL;
+    if (skipKeysObj) {
+        if (skipKeysObj == Py_None)
+            skipKeys = 1;
+        else if (PyBool_Check(skipKeysObj))
+            skipKeys = PyObject_IsTrue(skipKeysObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "skipkeys must be a bool value or None");
+            return NULL;
+        }
     }
 
-    if (indent && indent != Py_None) {
-        prettyPrint = true;
+    if (ensureAsciiObj) {
+        if (ensureAsciiObj == Py_None)
+            ensureAscii = 1;
+        else if (PyBool_Check(ensureAsciiObj))
+            ensureAscii = PyObject_IsTrue(ensureAsciiObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "ensure_ascii must be a bool value or None");
+            return NULL;
+        }
+    }
 
-        if (PyLong_Check(indent) && PyLong_AsLong(indent) >= 0) {
-            indentCharCount = PyLong_AsUnsignedLong(indent);
+    if (allowNanObj) {
+        if (allowNanObj == Py_None)
+            allowNan = 1;
+        else if (PyBool_Check(allowNanObj))
+            allowNan = PyObject_IsTrue(allowNanObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "allow_nan must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (indent) {
+        if (indent == Py_None)
+            prettyPrint = false;
+        else if (PyLong_Check(indent) && PyLong_AsLong(indent) >= 0) {
+            prettyPrint = true;
+            indentCharCount = PyLong_AsLong(indent);
         }
         else {
-            PyErr_SetString(PyExc_TypeError, "indent must be a non-negative int");
+            PyErr_SetString(PyExc_TypeError, "indent must be a non-negative int or None");
+            return NULL;
+        }
+    }
+
+    if (defaultFn) {
+        if (defaultFn == Py_None)
+            defaultFn = NULL;
+        else if (!PyCallable_Check(defaultFn)) {
+            PyErr_SetString(PyExc_TypeError, "default must be a callable or None");
+            return NULL;
+        }
+    }
+
+    if (sortKeysObj) {
+        if (sortKeysObj == Py_None)
+            sortKeys = 0;
+        else if (PyBool_Check(sortKeysObj))
+            sortKeys = PyObject_IsTrue(sortKeysObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "sort_keys must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (useDecimalObj) {
+        if (useDecimalObj == Py_None)
+            useDecimal = 0;
+        else if (PyBool_Check(useDecimalObj))
+            useDecimal = PyObject_IsTrue(useDecimalObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "use_decimal must be a bool value or None");
             return NULL;
         }
     }
 
     if (datetimeModeObj) {
-        if (PyLong_Check(datetimeModeObj)) {
+        if (datetimeModeObj == Py_None)
+            datetimeMode = DATETIME_MODE_NONE;
+        else if (PyLong_Check(datetimeModeObj)) {
             datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
             if (datetimeMode < DATETIME_MODE_NONE
                 || datetimeMode > DATETIME_MODE_ISO8601_UTC) {
@@ -1362,13 +1515,16 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
             }
         }
         else {
-            PyErr_SetString(PyExc_TypeError, "datetime_mode must be an integer value");
+            PyErr_SetString(PyExc_TypeError,
+                            "datetime_mode must be an integer value or None");
             return NULL;
         }
     }
 
     if (uuidModeObj) {
-        if (PyLong_Check(uuidModeObj)) {
+        if (uuidModeObj == Py_None)
+            uuidMode = UUID_MODE_NONE;
+        else if (PyLong_Check(uuidModeObj)) {
             uuidMode = (UuidMode) PyLong_AsLong(uuidModeObj);
             if (uuidMode < UUID_MODE_NONE || uuidMode > UUID_MODE_HEX) {
                 PyErr_SetString(PyExc_ValueError, "Invalid uuid_mode");
@@ -1376,7 +1532,25 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
             }
         }
         else {
-            PyErr_SetString(PyExc_TypeError, "uuid_mode must be an integer value");
+            PyErr_SetString(PyExc_TypeError,
+                            "uuid_mode must be an integer value or None");
+            return NULL;
+        }
+    }
+
+    if (numberModeObj) {
+        if (numberModeObj == Py_None)
+            numberMode = NUMBER_MODE_NONE;
+        else if (PyLong_Check(numberModeObj)) {
+            numberMode = (NumberMode) PyLong_AsLong(numberModeObj);
+            if (numberMode < NUMBER_MODE_NONE || numberMode > NUMBER_MODE_NATIVE) {
+                PyErr_SetString(PyExc_ValueError, "Invalid number_mode");
+                return NULL;
+            }
+        }
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "number_mode must be an integer value or None");
             return NULL;
         }
     }
@@ -1408,12 +1582,327 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
 }
 
 
+static PyObject*
+rapidjson_get_defaults(PyObject* self)
+{
+    PyObject* res;
+    PyObject* value;
+
+    res = PyDict_New();
+    if (!res)
+        return NULL;
+
+    value = PyBool_FromLong(defaultUseDecimal);
+    if (!value || PyDict_SetItemString(res, "use_decimal", value))
+        goto error;
+    Py_DECREF(value);
+
+    value = PyBool_FromLong(defaultAllowNan);
+    if (!value || PyDict_SetItemString(res, "allow_nan", value))
+        goto error;
+    Py_DECREF(value);
+
+    value = PyLong_FromLong(defaultDatetimeMode);
+    if (!value || PyDict_SetItemString(res, "datetime_mode", value))
+        goto error;
+    Py_DECREF(value);
+
+    value = defaultObjectHook;
+    if (!value)
+        value = Py_None;
+    if (PyDict_SetItemString(res, "object_hook", value)) {
+        value = NULL;
+        goto error;
+    }
+
+    value = PyLong_FromLong(defaultUuidMode);
+    if (!value || PyDict_SetItemString(res, "uuid_mode", value))
+        goto error;
+    Py_DECREF(value);
+
+    value = PyLong_FromLong(defaultNumberMode);
+    if (!value || PyDict_SetItemString(res, "number_mode", value))
+        goto error;
+    Py_DECREF(value);
+
+    value = PyBool_FromLong(defaultSkipKeys);
+    if (!value || PyDict_SetItemString(res, "skipkeys", value))
+        goto error;
+    Py_DECREF(value);
+
+    value = PyBool_FromLong(defaultEnsureAscii);
+    if (!value || PyDict_SetItemString(res, "ensure_ascii", value))
+        goto error;
+    Py_DECREF(value);
+
+    value = PyBool_FromLong(defaultSortKeys);
+    if (!value || PyDict_SetItemString(res, "sort_keys", value))
+        goto error;
+    Py_DECREF(value);
+
+    if (defaultIndent == -1) {
+        if (PyDict_SetItemString(res, "indent", Py_None)) {
+            value = NULL;
+            goto error;
+        }
+    }
+    else {
+        value = PyLong_FromLong(defaultIndent);
+        if (!value || PyDict_SetItemString(res, "indent", value))
+            goto error;
+        Py_DECREF(value);
+    }
+
+    value = defaultDefaultFn;
+    if (!value)
+        value = Py_None;
+    if (PyDict_SetItemString(res, "default", value)) {
+        value = NULL;
+        goto error;
+    }
+
+    return res;
+
+error:
+    Py_DECREF(res);
+    Py_XDECREF(value);
+    return NULL;
+}
+
+
+static PyObject*
+rapidjson_set_defaults(PyObject* self, PyObject* args, PyObject* kwargs)
+{
+    PyObject* objectHook = defaultObjectHook;
+    PyObject* useDecimalObj = NULL;
+    int useDecimal = defaultUseDecimal;
+    PyObject* allowNanObj = NULL;
+    int allowNan = defaultAllowNan;
+    PyObject* datetimeModeObj = NULL;
+    DatetimeMode datetimeMode = defaultDatetimeMode;
+    PyObject* uuidModeObj = NULL;
+    UuidMode uuidMode = defaultUuidMode;
+    PyObject* numberModeObj = NULL;
+    NumberMode numberMode = defaultNumberMode;
+    PyObject* skipKeysObj = NULL;
+    int skipKeys = defaultSkipKeys;
+    PyObject* ensureAsciiObj = NULL;
+    int ensureAscii = defaultEnsureAscii;
+    PyObject* sortKeysObj = NULL;
+    int sortKeys = defaultSortKeys;
+    PyObject* indentObj = NULL;
+    long indent = defaultIndent;
+    PyObject* defaultFn = defaultDefaultFn;
+    static char const * kwlist[] = {
+        "object_hook",
+        "use_decimal",
+        "allow_nan",
+        "datetime_mode",
+        "uuid_mode",
+        "number_mode",
+        "skipkeys",
+        "ensure_ascii",
+        "sort_keys",
+        "indent",
+        "default",
+        NULL
+    };
+
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "|$OOOOOOOOOOO:rapidjson.set_defaults",
+                                     (char **) kwlist,
+                                     &objectHook,
+                                     &useDecimalObj,
+                                     &allowNanObj,
+                                     &datetimeModeObj,
+                                     &uuidModeObj,
+                                     &numberModeObj,
+                                     &skipKeysObj,
+                                     &ensureAsciiObj,
+                                     &sortKeysObj,
+                                     &indentObj,
+                                     &defaultFn))
+        return NULL;
+
+    if (objectHook) {
+        if (objectHook == Py_None)
+            objectHook = NULL;
+        else if (!PyCallable_Check(objectHook)) {
+            PyErr_SetString(PyExc_TypeError, "object_hook must be a callable or None");
+            return NULL;
+        }
+    }
+
+    if (useDecimalObj) {
+        if (useDecimalObj == Py_None)
+            useDecimal = 0;
+        else if (PyBool_Check(useDecimalObj))
+            useDecimal = PyObject_IsTrue(useDecimalObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "use_decimal must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (allowNanObj) {
+        if (allowNanObj == Py_None)
+            allowNan = 1;
+        else if (PyBool_Check(allowNanObj))
+            allowNan = PyObject_IsTrue(allowNanObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "allow_nan must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (datetimeModeObj) {
+        if (datetimeModeObj == Py_None)
+            datetimeMode = DATETIME_MODE_NONE;
+        else if (PyLong_Check(datetimeModeObj)) {
+            datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
+            if (datetimeMode < DATETIME_MODE_NONE
+                || datetimeMode > DATETIME_MODE_ISO8601_UTC) {
+                PyErr_SetString(PyExc_ValueError, "Invalid datetime_mode");
+                return NULL;
+            }
+        }
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "datetime_mode must be an integer value or None");
+            return NULL;
+        }
+    }
+
+    if (uuidModeObj) {
+        if (uuidModeObj == Py_None)
+            uuidMode = UUID_MODE_NONE;
+        else if (PyLong_Check(uuidModeObj)) {
+            uuidMode = (UuidMode) PyLong_AsLong(uuidModeObj);
+            if (uuidMode < UUID_MODE_NONE || uuidMode > UUID_MODE_HEX) {
+                PyErr_SetString(PyExc_ValueError, "Invalid uuid_mode");
+                return NULL;
+            }
+        }
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "uuid_mode must be an integer value or None");
+            return NULL;
+        }
+    }
+
+    if (numberModeObj) {
+        if (numberModeObj == Py_None)
+            numberMode = NUMBER_MODE_NONE;
+        else if (PyLong_Check(numberModeObj)) {
+            numberMode = (NumberMode) PyLong_AsLong(numberModeObj);
+            if (numberMode < NUMBER_MODE_NONE || numberMode > NUMBER_MODE_NATIVE) {
+                PyErr_SetString(PyExc_ValueError, "Invalid number_mode");
+                return NULL;
+            }
+        }
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "number_mode must be an integer value or None");
+            return NULL;
+        }
+    }
+
+    if (skipKeysObj) {
+        if (skipKeysObj == Py_None)
+            skipKeys = 0;
+        else if (PyBool_Check(skipKeysObj))
+            skipKeys = PyObject_IsTrue(skipKeysObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "skipkeys must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (sortKeysObj) {
+        if (sortKeysObj == Py_None)
+            sortKeys = 0;
+        else if (PyBool_Check(sortKeysObj))
+            sortKeys = PyObject_IsTrue(sortKeysObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "sort_keys must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (ensureAsciiObj) {
+        if (ensureAsciiObj == Py_None)
+            ensureAscii = 1;
+        else if (PyBool_Check(ensureAsciiObj))
+            ensureAscii = PyObject_IsTrue(ensureAsciiObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "ensure_ascii must be a bool value or None");
+            return NULL;
+        }
+    }
+
+    if (indentObj) {
+        if (indentObj == Py_None)
+            indent = -1;
+        else if (PyLong_Check(indentObj) && PyLong_AsLong(indentObj) >= 0)
+            indent = PyLong_AsUnsignedLong(indentObj);
+        else {
+            PyErr_SetString(PyExc_TypeError,
+                            "indent must be a non-negative integer value or None");
+            return NULL;
+        }
+    }
+
+    if (defaultFn) {
+        if (defaultFn == Py_None)
+            defaultFn = NULL;
+        else if (!PyCallable_Check(defaultFn)) {
+            PyErr_SetString(PyExc_TypeError, "default must be a callable or None");
+            return NULL;
+        }
+    }
+
+    if (objectHook != defaultObjectHook) {
+        Py_XDECREF(defaultObjectHook);
+        defaultObjectHook = objectHook;
+        if (defaultObjectHook)
+            Py_INCREF(defaultObjectHook);
+    }
+
+    defaultUseDecimal = useDecimal;
+    defaultAllowNan = allowNan;
+    defaultDatetimeMode = datetimeMode;
+    defaultUuidMode = uuidMode;
+    defaultNumberMode = numberMode;
+    defaultSkipKeys = skipKeys;
+    defaultEnsureAscii = ensureAscii;
+    defaultSortKeys = sortKeys;
+    defaultIndent = indent;
+
+    if (defaultFn != defaultDefaultFn) {
+        Py_XDECREF(defaultDefaultFn);
+        defaultDefaultFn = defaultFn;
+        if (defaultDefaultFn)
+            Py_INCREF(defaultDefaultFn);
+    }
+
+    Py_RETURN_NONE;
+}
+
+
 static PyMethodDef
 rapidjson_functions[] = {
     {"loads", (PyCFunction) rapidjson_loads, METH_VARARGS | METH_KEYWORDS,
      rapidjson_loads_docstring},
     {"dumps", (PyCFunction) rapidjson_dumps, METH_VARARGS | METH_KEYWORDS,
      rapidjson_dumps_docstring},
+    {"get_defaults", (PyCFunction) rapidjson_get_defaults, METH_NOARGS,
+     rapidjson_get_defaults_docstring},
+    {"set_defaults", (PyCFunction) rapidjson_set_defaults, METH_VARARGS | METH_KEYWORDS,
+     rapidjson_set_defaults_docstring},
     {NULL, NULL, 0, NULL} /* sentinel */
 };
 
@@ -1503,6 +1992,9 @@ PyInit_rapidjson()
     PyModule_AddIntConstant(module, "UUID_MODE_NONE", UUID_MODE_NONE);
     PyModule_AddIntConstant(module, "UUID_MODE_HEX", UUID_MODE_HEX);
     PyModule_AddIntConstant(module, "UUID_MODE_CANONICAL", UUID_MODE_CANONICAL);
+
+    PyModule_AddIntConstant(module, "NUMBER_MODE_NONE", NUMBER_MODE_NONE);
+    PyModule_AddIntConstant(module, "NUMBER_MODE_NATIVE", NUMBER_MODE_NATIVE);
 
     PyModule_AddStringConstant(module, "__version__", PYTHON_RAPIDJSON_VERSION);
     PyModule_AddStringConstant(
