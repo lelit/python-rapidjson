@@ -23,15 +23,33 @@
    :class:`datetime` *and* :class:`date` instances representing those values
    using the `ISO 8601`_ format.
 
-.. data:: DATETIME_MODE_ISO8601_IGNORE_TZ = 2
+.. data:: DATETIME_MODE_UNIX_TIME = 2
 
-   This is like :data:`DATETIME_MODE_ISO8601` except that the value's timezone
-   is ignored.
+   This flag tells RapidJSON to serialize :class:`datetime`, :class:`date` and
+   :class:`time` as *numeric timestamps*: for the formers it is exactly the
+   result of their :meth:`timestamp` method, that is as the number of seconds
+   passed since ``EPOCH``; ``date`` instances are serialized as the
+   corresponding ``datetime`` instance with all the `time` slots set to 0;
+   ``time`` instances are serialized as the number of seconds since midnight.
 
-.. data:: DATETIME_MODE_ISO8601_UTC = 3
+   Since this is obviously *irreversible*, this flag is usable **only** for
+   :func:`dumps`: an error is raised when passed to :func:`loads`.
 
-   This is like :data:`DATETIME_MODE_ISO8601` except that the times are always
-   *shifted* to the UTC_ timezone.
+.. data:: DATETIME_MODE_ONLY_SECONDS = 32
+
+   This is usable in combination with :data:`DATETIME_MODE_UNIX_TIME` so that
+   an integer representation is used, ignoring *microseconds*.
+
+.. data:: DATETIME_MODE_IGNORE_TZ = 64
+
+   This can be used combined with :data:`DATETIME_MODE_ISO8601` or
+   :data:`DATETIME_MODE_UNIX_TIME`, to ignore the value's timezones.
+
+.. data:: DATETIME_MODE_UTC = 128
+
+   This can be used combined with :data:`DATETIME_MODE_ISO8601` or
+   :data:`DATETIME_MODE_UNIX_TIME`, to always *shift* values the UTC_
+   timezone.
 
 .. data:: UUID_MODE_NONE = 0
 
@@ -67,7 +85,8 @@
    from pprint import pprint
    from rapidjson import (get_defaults, set_defaults, dumps, loads,
                           DATETIME_MODE_NONE, DATETIME_MODE_ISO8601,
-                          DATETIME_MODE_ISO8601_IGNORE_TZ, DATETIME_MODE_ISO8601_UTC,
+                          DATETIME_MODE_UNIX_TIME, DATETIME_MODE_ONLY_SECONDS,
+                          DATETIME_MODE_IGNORE_TZ, DATETIME_MODE_UTC,
                           UUID_MODE_NONE, UUID_MODE_CANONICAL, UUID_MODE_HEX,
                           NUMBER_MODE_NONE, NUMBER_MODE_NATIVE)
 
@@ -295,40 +314,62 @@
    .. doctest::
 
       >>> from datetime import date, datetime
-      >>> today = date.today()
-      >>> right_now = datetime.now()
+      >>> today = date(2016, 8, 28)
+      >>> right_now = datetime(2016, 8, 28, 13, 14, 52, 277256)
       >>> dumps({'date': today, 'timestamp': right_now})
       Traceback (most recent call last):
         File "<stdin>", line 1, in <module>
       TypeError: datetime(…) is not JSON serializable
-      >>> dumps({'a date': today, 'a timestamp': right_now},
+      >>> dumps({'date': today, 'timestamp': right_now},
       ...       datetime_mode=DATETIME_MODE_ISO8601) # doctest: +SKIP
-      '{"timestamp":"2016-08-28T13:14:52.277256","date":"2016-08-28"}'
+      '{"date":"2016-08-28","timestamp":"2016-08-28T13:14:52.277256"}'
 
-   Another mode is :data:`DATETIME_MODE_ISO8601_UTC`, that *shifts* all
-   timestamps to the UTC_ timezone before serializing them:
+   Another mode is :data:`DATETIME_MODE_UTC`, that *shifts* all datetime values to
+   the UTC_ timezone before serializing them:
 
    .. doctest::
 
       >>> from datetime import timedelta, timezone
       >>> here = timezone(timedelta(hours=2))
-      >>> now = datetime.now(here)
-      >>> dumps(now)
-      Traceback (most recent call last):
-        File "<stdin>", line 1, in <module>
-      TypeError: datetime.datetime(…) is not JSON serializable
-      >>> dumps(now, datetime_mode=DATETIME_MODE_ISO8601) # doctest: +SKIP
+      >>> now = datetime(2016, 8, 28, 20, 31, 11, 84418, here)
+      >>> dumps(now, datetime_mode=DATETIME_MODE_ISO8601)
       '"2016-08-28T20:31:11.084418+02:00"'
-      >>> dumps(now, datetime_mode=DATETIME_MODE_ISO8601_UTC) # doctest: +SKIP
+      >>> dumps(now, datetime_mode=DATETIME_MODE_ISO8601+DATETIME_MODE_UTC)
       '"2016-08-28T18:31:11.084418+00:00"'
 
-   With :data:`DATETIME_MODE_ISO8601_IGNORE_TZ` the timezone, if present, is
-   simply omitted:
+   With :data:`DATETIME_MODE_IGNORE_TZ` the timezone, if present, is simply
+   omitted:
 
    .. doctest::
 
-      >>> dumps(now, datetime_mode=DATETIME_MODE_ISO8601_IGNORE_TZ) # doctest: +SKIP
+      >>> dumps(now, datetime_mode=DATETIME_MODE_ISO8601+DATETIME_MODE_IGNORE_TZ)
       '"2016-08-28T20:31:11.084418"'
+
+   Another popular but less versatile alternative format is `Unix time`_:
+   with :data:`DATETIME_MODE_UNIX_TIME` :class:`date`, :class:`datetime` and
+   :class:`time` instances are serialized as a number of seconds, respectively
+   since the ``EPOCH`` for the first two kinds and since midnight for the
+   latter:
+
+   .. doctest::
+
+      >>> dumps([now, now.date(), now.time()], datetime_mode=DATETIME_MODE_UNIX_TIME)
+      '[1472416271.084418,1472335200,73871.084418]'
+
+   Combining it with the :data:`DATETIME_MODE_ONLY_SECONDS` will produce
+   integer values instead, dropping *microseconds*:
+
+   .. doctest::
+
+      >>> dumps([now, now.date(), now.time()],
+      ...       datetime_mode=DATETIME_MODE_UNIX_TIME+DATETIME_MODE_ONLY_SECONDS)
+      '[1472416271,1472335200,73871]'
+
+   It can be used combined with :data:`DATETIME_MODE_UTC` to obtain the
+   timestamp of the corresponding UTC_ time:
+
+      >>> dumps(now, datetime_mode=DATETIME_MODE_UNIX_TIME+DATETIME_MODE_UTC)
+      '1472409071.084418'
 
    Likewise, to handle :class:`UUID` instances there are two modes that can be
    specified with the `uuid_mode` argument, that will use the string
@@ -349,7 +390,7 @@
 
    By default the module handles numeric values (i.e. *floats* and *integers*)
    as wide as allowed by the memory. Specifying :data:`NUMBER_MODE_NATIVE` for
-   `number_mode` they will be handled using architecture *native* arithmetic:
+   `number_mode` they will be handled using architecture's *native* arithmetic:
    while this is somewhat faster, it is subject to the underlying C library
    ``long long`` and ``double`` limits:
 
@@ -437,13 +478,23 @@
       ...       datetime_mode=DATETIME_MODE_ISO8601)
       datetime.datetime(2016, 1, 2, 1, 2, 3, tzinfo=...delta(0, 3600)))
       >>> loads('"2016-01-02T01:02:03+01:00"',
-      ...       datetime_mode=DATETIME_MODE_ISO8601_UTC)
+      ...       datetime_mode=DATETIME_MODE_ISO8601+DATETIME_MODE_UTC)
       datetime.datetime(2016, 1, 2, 0, 2, 3, tzinfo=...utc)
       >>> loads('"2016-01-02T01:02:03+01:00"',
-      ...       datetime_mode=DATETIME_MODE_ISO8601_IGNORE_TZ)
+      ...       datetime_mode=DATETIME_MODE_ISO8601+DATETIME_MODE_IGNORE_TZ)
       datetime.datetime(2016, 1, 2, 1, 2, 3)
       >>> loads('"2016-01-02"', datetime_mode=DATETIME_MODE_ISO8601)
       datetime.date(2016, 1, 2)
+
+   The :data:`DATETIME_MODE_UNIX_TIME` cannot be used here, for obvious
+   reasons:
+
+   .. doctest::
+
+      >>> loads('[1,2,3]', datetime_mode=DATETIME_MODE_UNIX_TIME)
+      Traceback (most recent call last):
+        File "<stdin>", line 1, in <module>
+      ValueError: Invalid datetime_mode, can deserialize only from ISO8601
 
    With `uuid_mode` you can enable recognition of string literals containing
    two different representations of :class:`UUID` values:
@@ -482,3 +533,4 @@
 
 .. _ISO 8601: https://en.wikipedia.org/wiki/ISO_8601
 .. _UTC: https://en.wikipedia.org/wiki/Coordinated_Universal_Time
+.. _Unix time: https://en.wikipedia.org/wiki/Unix_time
