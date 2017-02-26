@@ -12,18 +12,18 @@
 
    The author of the module.
 
-.. data:: DATETIME_MODE_NONE = 0
+.. data:: DATETIME_MODE_NONE
 
    This is the default ``datetime_mode``: *neither* :class:`datetime` *nor*
    :class:`date` instances are recognized by :func:`dumps` and :func:`loads`.
 
-.. data:: DATETIME_MODE_ISO8601 = 1
+.. data:: DATETIME_MODE_ISO8601
 
    In this ``datetime_mode`` mode :func:`dumps` and :func:`loads` handle
    :class:`datetime` *and* :class:`date` instances representing those values
    using the `ISO 8601`_ format.
 
-.. data:: DATETIME_MODE_UNIX_TIME = 2
+.. data:: DATETIME_MODE_UNIX_TIME
 
    This flag tells RapidJSON to serialize :class:`datetime`, :class:`date` and
    :class:`time` as *numeric timestamps*: for the formers it is exactly the
@@ -35,47 +35,47 @@
    Since this is obviously *irreversible*, this flag is usable **only** for
    :func:`dumps`: an error is raised when passed to :func:`loads`.
 
-.. data:: DATETIME_MODE_ONLY_SECONDS = 32
+.. data:: DATETIME_MODE_ONLY_SECONDS
 
    This is usable in combination with :data:`DATETIME_MODE_UNIX_TIME` so that
    an integer representation is used, ignoring *microseconds*.
 
-.. data:: DATETIME_MODE_IGNORE_TZ = 64
+.. data:: DATETIME_MODE_IGNORE_TZ
 
    This can be used combined with :data:`DATETIME_MODE_ISO8601` or
    :data:`DATETIME_MODE_UNIX_TIME`, to ignore the value's timezones.
 
-.. data:: DATETIME_MODE_UTC = 128
+.. data:: DATETIME_MODE_UTC
 
    This can be used combined with :data:`DATETIME_MODE_ISO8601` or
    :data:`DATETIME_MODE_UNIX_TIME`, to always *shift* values the UTC_
    timezone.
 
-.. data:: UUID_MODE_NONE = 0
+.. data:: UUID_MODE_NONE
 
    This is the default ``uuid_mode``: :class:`UUID` instances are *not*
    recognized by :func:`dumps` and :func:`loads`.
 
-.. data:: UUID_MODE_CANONICAL = 1
+.. data:: UUID_MODE_CANONICAL
 
    In this ``uuid_mode``, :func:`loads` recognizes string values containing
    the ``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`` canonical representation as
    :class:`UUID` instances; :func:`dumps` emits same kind of representation
    for :class:`UUID` instances as a string value.
 
-.. data:: UUID_MODE_HEX = 2
+.. data:: UUID_MODE_HEX
 
    In this ``uuid_mode`` :func:`loads` recognizes string values containing
    exactly 32 hex digits *or* the ``xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx``
    canonical representation as :class:`UUID` instances; :func:`dumps` emits
    the 32 hex digits of :class:`UUID` instances as a string value.
 
-.. data:: NUMBER_MODE_NONE = 0
+.. data:: NUMBER_MODE_NONE
 
    This is the default ``number_mode``: numeric values can be as wide as the
    memory allows.
 
-.. data:: NUMBER_MODE_NATIVE = 1
+.. data:: NUMBER_MODE_NATIVE
 
    In this alternative ``number_mode`` numeric values must fit into the
    underlying C library limits, with a considerable speed benefit.
@@ -345,11 +345,11 @@
       >>> dumps(now, datetime_mode=DATETIME_MODE_ISO8601+DATETIME_MODE_IGNORE_TZ)
       '"2016-08-28T20:31:11.084418"'
 
-   Another popular but less versatile alternative format is `Unix time`_:
-   with :data:`DATETIME_MODE_UNIX_TIME` :class:`date`, :class:`datetime` and
-   :class:`time` instances are serialized as a number of seconds, respectively
-   since the ``EPOCH`` for the first two kinds and since midnight for the
-   latter:
+   Another :ref:`one-way only <no-unix-time-loads>` alternative format is
+   `Unix time`_: with :data:`DATETIME_MODE_UNIX_TIME` :class:`date`,
+   :class:`datetime` and :class:`time` instances are serialized as a number of
+   seconds, respectively since the ``EPOCH`` for the first two kinds and since
+   midnight for the latter:
 
    .. doctest::
 
@@ -486,8 +486,11 @@
       >>> loads('"2016-01-02"', datetime_mode=DATETIME_MODE_ISO8601)
       datetime.date(2016, 1, 2)
 
-   The :data:`DATETIME_MODE_UNIX_TIME` cannot be used here, for obvious
-   reasons:
+   .. _no-unix-time-loads:
+
+   The :data:`DATETIME_MODE_UNIX_TIME` cannot be used here, because there
+   isn't a reasonable heuristic to disambiguate between plain numbers and
+   timestamps:
 
    .. doctest::
 
