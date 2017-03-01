@@ -75,9 +75,23 @@ def test_object_hook():
 
     assert rapidjson.loads('{"foo": 1}') == {"foo": 1}
 
-    # assert rapidjson.dumps(rapidjson.loads('{"foo": 1}', object_hook=hook),
-    #         default=default) == '{"foo":1}'
-    # res = rapidjson.loads(rapidjson.dumps(Foo(foo="bar"), default=default),
-    #         object_hook=hook)
-    # assert isinstance(res, Foo)
-    # assert res.foo == "bar"
+
+@pytest.mark.unit
+def test_default():
+    class Foo:
+        def __init__(self, foo):
+            self.foo = foo
+
+    def default(o):
+        if isinstance(o, Foo):
+            return dict(foo=o.foo)
+
+    foo = Foo('bar')
+
+    with pytest.raises(TypeError):
+        rapidjson.dumps(foo)
+
+    with temp_defaults(default=default):
+        assert rapidjson.dumps(foo) == rapidjson.dumps(dict(foo='bar'))
+        with pytest.raises(TypeError):
+            rapidjson.dumps(foo, default=None)
