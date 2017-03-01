@@ -35,18 +35,38 @@ struct HandlerContext {
 
 enum DatetimeMode {
     DATETIME_MODE_NONE = 0,
-    DATETIME_MODE_ISO8601 = 1,       // Bidirectional ISO8601 for datetimes, dates and times
-    DATETIME_MODE_UNIX_TIME = 2,     // Serialization only, "Unix epoch"-based number of seconds
-    DATETIME_MODE_ONLY_SECONDS = 32, // Truncate values to the whole second, ignoring micro seconds
-    DATETIME_MODE_IGNORE_TZ = 64,    // Ignore timezones
-    DATETIME_MODE_UTC = 128,         // Shift to/from UTC
-
-    DATETIME_MODE__MAX_VALUE = (1 + 2 + 32 + 64 + 128)
+    // Known formats
+    DATETIME_MODE_ISO8601 = 1,        // Bidirectional ISO8601 for datetimes, dates and times
+    DATETIME_MODE_UNIX_TIME = 2,      // Serialization only, "Unix epoch"-based number of seconds
+    // Options
+    DATETIME_MODE_ONLY_SECONDS = 16,  // Truncate values to the whole second, ignoring micro seconds
+    DATETIME_MODE_IGNORE_TZ = 32,     // Ignore timezones
+    DATETIME_MODE_NAIVE_IS_UTC = 64,  // Assume naive datetime are in UTC timezone
+    DATETIME_MODE_SHIFT_TO_UTC = 128, // Shift to/from UTC
 };
+
+
+#define DATETIME_MODE_FORMATS_MASK 0x0f
+
+
+static inline int
+datetime_mode_format(DatetimeMode mode) {
+    return mode & DATETIME_MODE_FORMATS_MASK;
+}
+
+
+static inline bool
+valid_datetime_mode(int mode) {
+    return (mode >= 0
+            && ((mode & DATETIME_MODE_FORMATS_MASK) <= DATETIME_MODE_UNIX_TIME)
+            && (mode == 0 || (mode & DATETIME_MODE_FORMATS_MASK) != 0));
+}
 
 
 static int
 days_per_month(int year, int month) {
+    assert(month >= 1);
+    assert(month <= 12);
     if (month == 1 || month == 3 || month == 5 || month == 7
         || month == 8 || month == 10 || month == 12)
         return 31;
@@ -582,7 +602,7 @@ struct PyHandler {
                             PyDateTimeAPI->TimeType);
                         Py_DECREF(tz);
 
-                        if (value != NULL && datetimeMode & DATETIME_MODE_UTC) {
+                        if (value != NULL && datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
                             PyObject* asUTC = PyObject_CallMethod(value, "astimezone", "O",
                                                                   rapidjson_timezone_utc);
 
@@ -666,7 +686,7 @@ struct PyHandler {
                             tz, PyDateTimeAPI->DateTimeType);
                         Py_DECREF(tz);
 
-                        if (value != NULL && datetimeMode & DATETIME_MODE_UTC) {
+                        if (value != NULL && datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
                             PyObject* asUTC = PyObject_CallMethod(value, "astimezone", "O",
                                                                   rapidjson_timezone_utc);
 
@@ -731,7 +751,7 @@ struct PyHandler {
     bool String(const char* str, SizeType length, bool copy) {
         PyObject* value;
 
-        if (datetimeMode & DATETIME_MODE_ISO8601 && IsIso8601(str, length))
+        if (datetime_mode_format(datetimeMode) == DATETIME_MODE_ISO8601 && IsIso8601(str, length))
             return HandleIso8601(str, length);
 
         if (uuidMode != UUID_MODE_NONE && IsUuid(str, length))
@@ -838,16 +858,13 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
         if (datetimeModeObj == Py_None)
             datetimeMode = DATETIME_MODE_NONE;
         else if (PyLong_Check(datetimeModeObj)) {
-            datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
-            if (datetimeMode != DATETIME_MODE_NONE
-                && (datetimeMode < DATETIME_MODE_NONE
-                    || datetimeMode > DATETIME_MODE__MAX_VALUE
-                    || (datetimeMode & DATETIME_MODE_ISO8601
-                        && datetimeMode & DATETIME_MODE_UNIX_TIME))) {
+            int mode = PyLong_AsLong(datetimeModeObj);
+            if (!valid_datetime_mode(mode)) {
                 PyErr_SetString(PyExc_ValueError, "Invalid datetime_mode");
                 return NULL;
             }
-            if (!(datetimeMode & DATETIME_MODE_ISO8601)) {
+            datetimeMode = (DatetimeMode) mode;
+            if (datetimeMode && datetime_mode_format(datetimeMode) != DATETIME_MODE_ISO8601) {
                 PyErr_SetString(PyExc_ValueError,
                                 "Invalid datetime_mode, can deserialize only from ISO8601");
                 return NULL;
@@ -855,7 +872,7 @@ rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
         }
         else {
             PyErr_SetString(PyExc_TypeError,
-                            "datetime_mode must be an integer value or None");
+                            "datetime_mode must be a non-negative integer value or None");
             return NULL;
         }
     }
@@ -1212,8 +1229,6 @@ rapidjson_dumps_internal(
             const int TIMEZONE_LEN = 10;
             char timeZone[TIMEZONE_LEN] = { 0 };
 
-            double offset_from_utc; // used to fix timestamp() result in UNIX_TIME mode
-            
             if (!(datetimeMode & DATETIME_MODE_IGNORE_TZ)
                 && PyObject_HasAttrString(object, "utcoffset")) {
                 PyObject* utcOffset = PyObject_CallMethod(object, "utcoffset", NULL);
@@ -1221,8 +1236,47 @@ rapidjson_dumps_internal(
                 if (!utcOffset)
                     goto error;
 
-                if (utcOffset != Py_None) {
-                    if (datetimeMode & DATETIME_MODE_UTC) {
+                if (utcOffset == Py_None) {
+                    // Naive value: maybe assume it's in UTC instead of local time
+                    if (datetimeMode & DATETIME_MODE_NAIVE_IS_UTC) {
+
+                        if (PyDateTime_Check(object)) {
+                            hour = PyDateTime_DATE_GET_HOUR(dtObject);
+                            min = PyDateTime_DATE_GET_MINUTE(dtObject);
+                            sec = PyDateTime_DATE_GET_SECOND(dtObject);
+                            microsec = PyDateTime_DATE_GET_MICROSECOND(dtObject);
+                            year = PyDateTime_GET_YEAR(dtObject);
+                            month = PyDateTime_GET_MONTH(dtObject);
+                            day = PyDateTime_GET_DAY(dtObject);
+
+                            asUTC = PyDateTimeAPI->DateTime_FromDateAndTime(
+                                year, month, day, hour, min, sec, microsec,
+                                rapidjson_timezone_utc,
+                                PyDateTimeAPI->DateTimeType);
+                        } else {
+                            hour = PyDateTime_TIME_GET_HOUR(dtObject);
+                            min = PyDateTime_TIME_GET_MINUTE(dtObject);
+                            sec = PyDateTime_TIME_GET_SECOND(dtObject);
+                            microsec = PyDateTime_TIME_GET_MICROSECOND(dtObject);
+                            asUTC = PyDateTimeAPI->Time_FromTime(
+                                hour, min, sec, microsec,
+                                rapidjson_timezone_utc,
+                                PyDateTimeAPI->TimeType);
+                        }
+
+                        if (asUTC == NULL) {
+                            Py_DECREF(utcOffset);
+                            goto error;
+                        }
+
+                        dtObject = asUTC;
+
+                        if (datetime_mode_format(datetimeMode) == DATETIME_MODE_ISO8601)
+                            strcpy(timeZone, "+00:00");
+                    }
+                } else {
+                    // Timezone-aware value
+                    if (datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
                         // If it's not already in UTC, shift the value
                         if (PyObject_IsTrue(utcOffset)) {
                             asUTC = PyObject_CallMethod(object, "astimezone",
@@ -1235,43 +1289,43 @@ rapidjson_dumps_internal(
 
                             dtObject = asUTC;
                         }
-                        if (datetimeMode & DATETIME_MODE_ISO8601)
+
+                        if (datetime_mode_format(datetimeMode) == DATETIME_MODE_ISO8601)
                             strcpy(timeZone, "+00:00");
-                        else
-                            offset_from_utc = 0.0;
-                    } else {
-                        PyObject* tsObj = PyObject_CallMethod(utcOffset, "total_seconds", NULL);
+                    } else if (datetime_mode_format(datetimeMode) == DATETIME_MODE_ISO8601) {
+                        int seconds_from_utc = 0;
 
-                        if (tsObj == NULL) {
-                            Py_DECREF(utcOffset);
-                            goto error;
-                        }
+                        if (PyObject_IsTrue(utcOffset)) {
+                            PyObject* tsObj = PyObject_CallMethod(utcOffset, "total_seconds", NULL);
 
-                        offset_from_utc = PyFloat_AsDouble(tsObj);
-
-                        Py_DECREF(tsObj);
-                        
-                        if (datetimeMode & DATETIME_MODE_ISO8601) {
-                            int total_seconds = offset_from_utc;
-
-                            char sign = '+';
-                            if (total_seconds < 0) {
-                                sign = '-';
-                                total_seconds = -total_seconds;
+                            if (tsObj == NULL) {
+                                Py_DECREF(utcOffset);
+                                goto error;
                             }
 
-                            int tz_hour = total_seconds / 3600;
-                            int tz_min = (total_seconds % 3600) / 60;
+                            seconds_from_utc = PyFloat_AsDouble(tsObj);
 
-                            snprintf(timeZone, TIMEZONE_LEN-1, "%c%02d:%02d",
-                                     sign, tz_hour, tz_min);
+                            Py_DECREF(tsObj);
                         }
+
+                        char sign = '+';
+
+                        if (seconds_from_utc < 0) {
+                            sign = '-';
+                            seconds_from_utc = -seconds_from_utc;
+                        }
+
+                        int tz_hour = seconds_from_utc / 3600;
+                        int tz_min = (seconds_from_utc % 3600) / 60;
+
+                        snprintf(timeZone, TIMEZONE_LEN-1, "%c%02d:%02d",
+                                 sign, tz_hour, tz_min);
                     }
                 }
                 Py_DECREF(utcOffset);
             }
 
-            if (datetimeMode & DATETIME_MODE_ISO8601) {
+            if (datetime_mode_format(datetimeMode) == DATETIME_MODE_ISO8601) {
                 if (PyDateTime_Check(dtObject)) {
                     year = PyDateTime_GET_YEAR(dtObject);
                     month = PyDateTime_GET_MONTH(dtObject);
@@ -1280,6 +1334,7 @@ rapidjson_dumps_internal(
                     min = PyDateTime_DATE_GET_MINUTE(dtObject);
                     sec = PyDateTime_DATE_GET_SECOND(dtObject);
                     microsec = PyDateTime_DATE_GET_MICROSECOND(dtObject);
+
                     if (microsec > 0) {
                         snprintf(isoformat,
                                  ISOFORMAT_LEN-1,
@@ -1300,6 +1355,7 @@ rapidjson_dumps_internal(
                     min = PyDateTime_TIME_GET_MINUTE(dtObject);
                     sec = PyDateTime_TIME_GET_SECOND(dtObject);
                     microsec = PyDateTime_TIME_GET_MICROSECOND(dtObject);
+
                     if (microsec > 0) {
                         snprintf(isoformat,
                                  ISOFORMAT_LEN-1,
@@ -1317,12 +1373,16 @@ rapidjson_dumps_internal(
                 writer->String(isoformat);
             } else /* if (datetimeMode & DATETIME_MODE_UNIX_TIME) */ {
                 if (PyDateTime_Check(dtObject)) {
-                    PyObject* timestampObj = PyObject_CallMethod(dtObject, "timestamp", NULL);
+                    PyObject* timestampObj;
 
-                    if (!timestampObj)
+                    timestampObj = PyObject_CallMethod(dtObject, "timestamp", NULL);
+
+                    if (!timestampObj) {
+                        Py_XDECREF(asUTC);
                         goto error;
+                    }
 
-                    double timestamp = PyFloat_AsDouble(timestampObj) + offset_from_utc;
+                    double timestamp = PyFloat_AsDouble(timestampObj);
 
                     Py_DECREF(timestampObj);
 
@@ -1334,14 +1394,14 @@ rapidjson_dumps_internal(
                     hour = PyDateTime_TIME_GET_HOUR(dtObject);
                     min = PyDateTime_TIME_GET_MINUTE(dtObject);
                     sec = PyDateTime_TIME_GET_SECOND(dtObject);
+                    microsec = PyDateTime_TIME_GET_MICROSECOND(dtObject);
+
+                    long timestamp = hour * 3600 + min * 60 + sec;
 
                     if (datetimeMode & DATETIME_MODE_ONLY_SECONDS)
-                        writer->Int64(hour * 3600 + min * 60 + sec);
-                    else {
-                        microsec = PyDateTime_TIME_GET_MICROSECOND(dtObject);
-
-                        writer->Double(hour * 3600 + min * 60 + sec + (microsec / 1000000.0));
-                    }
+                        writer->Int64(timestamp);
+                    else
+                        writer->Double(timestamp + (microsec / 1000000.0));
                 }
             }
             Py_XDECREF(asUTC);
@@ -1351,23 +1411,33 @@ rapidjson_dumps_internal(
             int month = PyDateTime_GET_MONTH(object);
             int day = PyDateTime_GET_DAY(object);
 
-            if (datetimeMode & DATETIME_MODE_ISO8601) {
+            if (datetime_mode_format(datetimeMode) == DATETIME_MODE_ISO8601) {
                 const int ISOFORMAT_LEN = 12;
                 char isoformat[ISOFORMAT_LEN];
                 memset(isoformat, 0, ISOFORMAT_LEN);
 
                 snprintf(isoformat, ISOFORMAT_LEN-1, "%04d-%02d-%02d", year, month, day);
                 writer->String(isoformat);
-            } else /* if (datetimeMode & DATETIME_MODE_UNIX_TIME) */ {
-                PyObject* dtObject = PyDateTime_FromDateAndTime(
-                    year, month, day, 0, 0, 0, 0);
+            } else /* datetime_mode_format(datetimeMode) == DATETIME_MODE_UNIX_TIME */ {
+                // A date object, take its midnight timestamp
+                PyObject* midnightObj;
+                PyObject* timestampObj;
 
-                if (!dtObject)
+                if (datetimeMode & (DATETIME_MODE_SHIFT_TO_UTC | DATETIME_MODE_NAIVE_IS_UTC))
+                    midnightObj = PyDateTimeAPI->DateTime_FromDateAndTime(
+                        year, month, day, 0, 0, 0, 0,
+                        rapidjson_timezone_utc,
+                        PyDateTimeAPI->DateTimeType);
+                else
+                    midnightObj = PyDateTime_FromDateAndTime(year, month, day, 0, 0, 0, 0);
+
+                if (!midnightObj) {
                     goto error;
+                }
 
-                PyObject* timestampObj = PyObject_CallMethod(dtObject, "timestamp", NULL);
+                timestampObj = PyObject_CallMethod(midnightObj, "timestamp", NULL);
 
-                Py_DECREF(dtObject);
+                Py_DECREF(midnightObj);
 
                 if (!timestampObj) {
                     goto error;
@@ -1377,7 +1447,10 @@ rapidjson_dumps_internal(
 
                 Py_DECREF(timestampObj);
 
-                writer->Int64(timestamp);
+                if (datetimeMode & DATETIME_MODE_ONLY_SECONDS)
+                    writer->Int64(timestamp);
+                else
+                    writer->Double(timestamp);
             }
         }
         else if (uuidMode != UUID_MODE_NONE
@@ -1580,21 +1653,16 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
         if (datetimeModeObj == Py_None)
             datetimeMode = DATETIME_MODE_NONE;
         else if (PyLong_Check(datetimeModeObj)) {
-            datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
-            if (datetimeMode != DATETIME_MODE_NONE
-                && (datetimeMode < DATETIME_MODE_NONE
-                    || datetimeMode > DATETIME_MODE__MAX_VALUE
-                    || (datetimeMode & DATETIME_MODE_ISO8601
-                        && datetimeMode & DATETIME_MODE_UNIX_TIME)
-                    || !(datetimeMode & DATETIME_MODE_ISO8601
-                         || datetimeMode & DATETIME_MODE_UNIX_TIME))) {
+            int mode = PyLong_AsLong(datetimeModeObj);
+            if (!valid_datetime_mode(mode)) {
                 PyErr_SetString(PyExc_ValueError, "Invalid datetime_mode");
                 return NULL;
             }
+            datetimeMode = (DatetimeMode) mode;
         }
         else {
             PyErr_SetString(PyExc_TypeError,
-                            "datetime_mode must be an integer value or None");
+                            "datetime_mode must be a non-negative integer value or None");
             return NULL;
         }
     }
@@ -1838,17 +1906,12 @@ rapidjson_set_defaults(PyObject* self, PyObject* args, PyObject* kwargs)
         if (datetimeModeObj == Py_None)
             datetimeMode = DATETIME_MODE_NONE;
         else if (PyLong_Check(datetimeModeObj)) {
-            datetimeMode = (DatetimeMode) PyLong_AsLong(datetimeModeObj);
-            if (datetimeMode != DATETIME_MODE_NONE
-                && (datetimeMode < DATETIME_MODE_NONE
-                    || datetimeMode > DATETIME_MODE__MAX_VALUE
-                    || (datetimeMode & DATETIME_MODE_ISO8601
-                        && datetimeMode & DATETIME_MODE_UNIX_TIME)
-                    || !(datetimeMode & DATETIME_MODE_ISO8601
-                         || datetimeMode & DATETIME_MODE_UNIX_TIME))) {
+            int mode = PyLong_AsLong(datetimeModeObj);
+            if (!valid_datetime_mode(mode)) {
                 PyErr_SetString(PyExc_ValueError, "Invalid datetime_mode");
                 return NULL;
             }
+            datetimeMode = (DatetimeMode) mode;
         }
         else {
             PyErr_SetString(PyExc_TypeError,
@@ -2070,7 +2133,8 @@ PyInit_rapidjson()
     PyModule_AddIntConstant(module, "DATETIME_MODE_UNIX_TIME", DATETIME_MODE_UNIX_TIME);
     PyModule_AddIntConstant(module, "DATETIME_MODE_ONLY_SECONDS", DATETIME_MODE_ONLY_SECONDS);
     PyModule_AddIntConstant(module, "DATETIME_MODE_IGNORE_TZ", DATETIME_MODE_IGNORE_TZ);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_UTC", DATETIME_MODE_UTC);
+    PyModule_AddIntConstant(module, "DATETIME_MODE_NAIVE_IS_UTC", DATETIME_MODE_NAIVE_IS_UTC);
+    PyModule_AddIntConstant(module, "DATETIME_MODE_SHIFT_TO_UTC", DATETIME_MODE_SHIFT_TO_UTC);
 
     PyModule_AddIntConstant(module, "UUID_MODE_NONE", UUID_MODE_NONE);
     PyModule_AddIntConstant(module, "UUID_MODE_HEX", UUID_MODE_HEX);

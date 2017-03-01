@@ -26,10 +26,8 @@ def test_invalid_get_defaults_params():
         ( (), { 'object_hook': True } ),
         ( (), { 'datetime_mode': 'no' } ),
         ( (), { 'datetime_mode': -100 } ),
-        ( (), { 'datetime_mode': 1000 } ),
-        ( (), { 'datetime_mode':
-                rapidjson.DATETIME_MODE_ISO8601+rapidjson.DATETIME_MODE_UNIX_TIME } ),
-        ( (), { 'datetime_mode': rapidjson.DATETIME_MODE_UTC } ),
+        ( (), { 'datetime_mode': rapidjson.DATETIME_MODE_UNIX_TIME + 1 } ),
+        ( (), { 'datetime_mode': rapidjson.DATETIME_MODE_SHIFT_TO_UTC } ),
         ( (), { 'uuid_mode': 'no' } ),
         ( (), { 'uuid_mode': -100 } ),
         ( (), { 'uuid_mode': 100 } ),

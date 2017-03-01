@@ -1,4 +1,5 @@
 from datetime import date, datetime, time
+from calendar import timegm
 import math
 import uuid
 
@@ -197,22 +198,40 @@ def test_datetime_mode_dumps():
     dstr = d.isoformat()
 
     assert rapidjson.dumps(d, datetime_mode=rapidjson.DATETIME_MODE_ISO8601) == '"%s"' % dstr
-    assert rapidjson.dumps(d, datetime_mode=(rapidjson.DATETIME_MODE_ISO8601
-                                             + rapidjson.DATETIME_MODE_IGNORE_TZ)) == '"%s"' % dstr[:-6]
-    assert rapidjson.dumps(d, datetime_mode=(rapidjson.DATETIME_MODE_ISO8601
-                                             + rapidjson.DATETIME_MODE_UTC)) == '"%s"' % utcstr
+    assert rapidjson.dumps(
+        d, datetime_mode=(rapidjson.DATETIME_MODE_ISO8601 + rapidjson.DATETIME_MODE_IGNORE_TZ)
+    ) == '"%s"' % dstr[:-6]
+    assert rapidjson.dumps(
+        d, datetime_mode=(rapidjson.DATETIME_MODE_ISO8601 + rapidjson.DATETIME_MODE_SHIFT_TO_UTC)
+    ) == '"%s"' % utcstr
 
     assert rapidjson.dumps(
         d, datetime_mode=rapidjson.DATETIME_MODE_UNIX_TIME
-    ) == str(d.timestamp() + d.utcoffset().total_seconds())
+    ) == str(d.timestamp())
 
     assert rapidjson.dumps(
-        d, datetime_mode=rapidjson.DATETIME_MODE_UNIX_TIME + rapidjson.DATETIME_MODE_UTC
+        d, datetime_mode=rapidjson.DATETIME_MODE_UNIX_TIME + rapidjson.DATETIME_MODE_SHIFT_TO_UTC
     ) == str(utcd.timestamp())
 
     assert rapidjson.dumps(
         d, datetime_mode= rapidjson.DATETIME_MODE_UNIX_TIME + rapidjson.DATETIME_MODE_ONLY_SECONDS
-    ) == str(d.timestamp() + d.utcoffset().total_seconds()).split('.')[0]
+    ) == str(d.timestamp()).split('.')[0]
+
+    d = datetime.now()
+
+    assert rapidjson.dumps(
+        d, datetime_mode=rapidjson.DATETIME_MODE_ISO8601 + rapidjson.DATETIME_MODE_NAIVE_IS_UTC
+    ) == '"%s+00:00"' % d.isoformat()
+
+    assert rapidjson.dumps(
+        d, datetime_mode=rapidjson.DATETIME_MODE_UNIX_TIME + rapidjson.DATETIME_MODE_NAIVE_IS_UTC
+    ) == ('%d.%06d' % (timegm(d.timetuple()), d.microsecond)).rstrip('0')
+
+    assert rapidjson.dumps(
+        d, datetime_mode=(rapidjson.DATETIME_MODE_UNIX_TIME
+                          + rapidjson.DATETIME_MODE_NAIVE_IS_UTC
+                          + rapidjson.DATETIME_MODE_ONLY_SECONDS)
+    ) == str(timegm(d.timetuple()))
 
 
 @pytest.mark.unit
@@ -237,7 +256,7 @@ def test_datetime_mode_loads():
     assert rapidjson.loads(jsond, datetime_mode=rapidjson.DATETIME_MODE_ISO8601) == local
 
     load_as_utc = rapidjson.loads(jsond, datetime_mode=(rapidjson.DATETIME_MODE_ISO8601
-                                                        + rapidjson.DATETIME_MODE_UTC))
+                                                        + rapidjson.DATETIME_MODE_SHIFT_TO_UTC))
 
     assert load_as_utc == utc
     assert not load_as_utc.utcoffset()
@@ -429,11 +448,9 @@ def test_object_hook():
         ( ('[]',), { 'datetime_mode': 'no' } ),
         ( ('[]',), { 'datetime_mode': 1.0 } ),
         ( ('[]',), { 'datetime_mode': -100 } ),
-        ( ('[]',), { 'datetime_mode': 1000 } ),
-        ( ('[]',), { 'datetime_mode':
-                     rapidjson.DATETIME_MODE_ISO8601+rapidjson.DATETIME_MODE_UNIX_TIME } ),
+        ( ('[]',), { 'datetime_mode': rapidjson.DATETIME_MODE_UNIX_TIME + 1 } ),
         ( ('[]',), { 'datetime_mode': rapidjson.DATETIME_MODE_UNIX_TIME } ),
-        ( ('[]',), { 'datetime_mode': rapidjson.DATETIME_MODE_UTC } ),
+        ( ('[]',), { 'datetime_mode': rapidjson.DATETIME_MODE_SHIFT_TO_UTC } ),
         ( ('[]',), { 'uuid_mode': 'no' } ),
         ( ('[]',), { 'uuid_mode': 1.0 } ),
         ( ('[]',), { 'uuid_mode': -100 } ),
@@ -462,10 +479,8 @@ def test_invalid_loads_params(posargs, kwargs):
         ( ([],), { 'datetime_mode': 'no' } ),
         ( ([],), { 'datetime_mode': 1.0 } ),
         ( ([],), { 'datetime_mode': -100 } ),
-        ( ([],), { 'datetime_mode': 1000 } ),
-        ( ([],), { 'datetime_mode':
-                   rapidjson.DATETIME_MODE_ISO8601+rapidjson.DATETIME_MODE_UNIX_TIME } ),
-        ( ([],), { 'datetime_mode': rapidjson.DATETIME_MODE_UTC } ),
+        ( ([],), { 'datetime_mode': rapidjson.DATETIME_MODE_UNIX_TIME + 1 } ),
+        ( ([],), { 'datetime_mode': rapidjson.DATETIME_MODE_SHIFT_TO_UTC } ),
         ( ([],), { 'uuid_mode': 'no' } ),
         ( ([],), { 'uuid_mode': 1.0 } ),
         ( ([],), { 'uuid_mode': -100 } ),
