@@ -24,6 +24,11 @@ static PyObject* rapidjson_timezone_type = NULL;
 static PyObject* rapidjson_timezone_utc = NULL;
 static PyObject* rapidjson_uuid_type = NULL;
 
+static PyObject* astimezone_name = NULL;
+static PyObject* utcoffset_name = NULL;
+static PyObject* total_seconds_name = NULL;
+static PyObject* timestamp_name = NULL;
+
 
 struct HandlerContext {
     PyObject* object;
@@ -603,8 +608,8 @@ struct PyHandler {
                         Py_DECREF(tz);
 
                         if (value != NULL && datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
-                            PyObject* asUTC = PyObject_CallMethod(value, "astimezone", "O",
-                                                                  rapidjson_timezone_utc);
+                            PyObject* asUTC = PyObject_CallMethodObjArgs(
+                                value, astimezone_name, rapidjson_timezone_utc, NULL);
 
                             Py_DECREF(value);
 
@@ -687,8 +692,8 @@ struct PyHandler {
                         Py_DECREF(tz);
 
                         if (value != NULL && datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
-                            PyObject* asUTC = PyObject_CallMethod(value, "astimezone", "O",
-                                                                  rapidjson_timezone_utc);
+                            PyObject* asUTC = PyObject_CallMethodObjArgs(
+                                value, astimezone_name, rapidjson_timezone_utc, NULL);
 
                             Py_DECREF(value);
 
@@ -1230,8 +1235,8 @@ rapidjson_dumps_internal(
             char timeZone[TIMEZONE_LEN] = { 0 };
 
             if (!(datetimeMode & DATETIME_MODE_IGNORE_TZ)
-                && PyObject_HasAttrString(object, "utcoffset")) {
-                PyObject* utcOffset = PyObject_CallMethod(object, "utcoffset", NULL);
+                && PyObject_HasAttr(object, utcoffset_name)) {
+                PyObject* utcOffset = PyObject_CallMethodObjArgs(object, utcoffset_name, NULL);
 
                 if (!utcOffset)
                     goto error;
@@ -1279,8 +1284,8 @@ rapidjson_dumps_internal(
                     if (datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
                         // If it's not already in UTC, shift the value
                         if (PyObject_IsTrue(utcOffset)) {
-                            asUTC = PyObject_CallMethod(object, "astimezone",
-                                                        "O", rapidjson_timezone_utc);
+                            asUTC = PyObject_CallMethodObjArgs(object, astimezone_name,
+                                                               rapidjson_timezone_utc, NULL);
 
                             if (asUTC == NULL) {
                                 Py_DECREF(utcOffset);
@@ -1296,7 +1301,8 @@ rapidjson_dumps_internal(
                         int seconds_from_utc = 0;
 
                         if (PyObject_IsTrue(utcOffset)) {
-                            PyObject* tsObj = PyObject_CallMethod(utcOffset, "total_seconds", NULL);
+                            PyObject* tsObj = PyObject_CallMethodObjArgs(utcOffset, total_seconds_name,
+                                                                         NULL);
 
                             if (tsObj == NULL) {
                                 Py_DECREF(utcOffset);
@@ -1375,7 +1381,7 @@ rapidjson_dumps_internal(
                 if (PyDateTime_Check(dtObject)) {
                     PyObject* timestampObj;
 
-                    timestampObj = PyObject_CallMethod(dtObject, "timestamp", NULL);
+                    timestampObj = PyObject_CallMethodObjArgs(dtObject, timestamp_name, NULL);
 
                     if (!timestampObj) {
                         Py_XDECREF(asUTC);
@@ -1435,7 +1441,7 @@ rapidjson_dumps_internal(
                     goto error;
                 }
 
-                timestampObj = PyObject_CallMethod(midnightObj, "timestamp", NULL);
+                timestampObj = PyObject_CallMethodObjArgs(midnightObj, timestamp_name, NULL);
 
                 Py_DECREF(midnightObj);
 
@@ -2065,6 +2071,22 @@ static PyModuleDef rapidjson_module = {
 PyMODINIT_FUNC
 PyInit_rapidjson()
 {
+    astimezone_name = PyUnicode_InternFromString("astimezone");
+    if (astimezone_name == NULL)
+        return NULL;
+
+    utcoffset_name = PyUnicode_InternFromString("utcoffset");
+    if (utcoffset_name == NULL)
+        return NULL;
+
+    total_seconds_name = PyUnicode_InternFromString("total_seconds");
+    if (total_seconds_name == NULL)
+        return NULL;
+
+    timestamp_name = PyUnicode_InternFromString("timestamp");
+    if (timestamp_name == NULL)
+        return NULL;
+
     PyDateTime_IMPORT;
 
     PyObject* datetimeModule = PyImport_ImportModule("datetime");
