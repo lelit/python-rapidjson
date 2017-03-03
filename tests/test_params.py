@@ -1,9 +1,10 @@
-from datetime import date, datetime, time
 from calendar import timegm
+from datetime import date, datetime, time
 import math
 import uuid
 
 import pytest
+
 import rapidjson as rj
 
 

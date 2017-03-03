@@ -1,5 +1,6 @@
 import pytest
-import rapidjson
+
+import rapidjson as rj
 
 
 @pytest.mark.unit
@@ -8,7 +9,7 @@ def test_circular_dict():
     dct['a'] = dct
 
     with pytest.raises(OverflowError):
-        rapidjson.dumps(dct)
+        rj.dumps(dct)
 
 
 @pytest.mark.unit
@@ -16,7 +17,7 @@ def test_circular_list():
     lst = []
     lst.append(lst)
     with pytest.raises(OverflowError):
-        rapidjson.dumps(lst)
+        rj.dumps(lst)
 
 
 @pytest.mark.unit
@@ -26,4 +27,4 @@ def test_circular_composite():
     dct2['a'].append(dct2)
 
     with pytest.raises(OverflowError):
-        rapidjson.dumps(dct2)
+        rj.dumps(dct2)
