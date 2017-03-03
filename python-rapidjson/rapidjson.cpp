@@ -19,10 +19,10 @@
 using namespace rapidjson;
 
 
-static PyObject* rapidjson_decimal_type = NULL;
-static PyObject* rapidjson_timezone_type = NULL;
-static PyObject* rapidjson_timezone_utc = NULL;
-static PyObject* rapidjson_uuid_type = NULL;
+static PyObject* decimal_type = NULL;
+static PyObject* timezone_type = NULL;
+static PyObject* timezone_utc = NULL;
+static PyObject* uuid_type = NULL;
 
 static PyObject* astimezone_name = NULL;
 static PyObject* utcoffset_name = NULL;
@@ -287,7 +287,7 @@ struct PyHandler {
         if (!useDecimal)
             value = PyFloat_FromString(str);
         else
-            value = PyObject_CallFunctionObjArgs(rapidjson_decimal_type, str, NULL);
+            value = PyObject_CallFunctionObjArgs(decimal_type, str, NULL);
 
         Py_DECREF(str);
 
@@ -318,7 +318,7 @@ struct PyHandler {
         if (!useDecimal)
             value = PyFloat_FromString(str);
         else
-            value = PyObject_CallFunctionObjArgs(rapidjson_decimal_type, str, NULL);
+            value = PyObject_CallFunctionObjArgs(decimal_type, str, NULL);
 
         Py_DECREF(str);
 
@@ -390,7 +390,7 @@ struct PyHandler {
             if (!useDecimal) {
                 value = PyFloat_FromString(pystr);
             } else {
-                value = PyObject_CallFunctionObjArgs(rapidjson_decimal_type, pystr, NULL);
+                value = PyObject_CallFunctionObjArgs(decimal_type, pystr, NULL);
             }
 
             Py_DECREF(pystr);
@@ -584,7 +584,7 @@ struct PyHandler {
                 value = PyTime_FromTime(hours, mins, secs, usecs);
             else if (length == 9 || length == 13 || length == 16)
                 value = PyDateTimeAPI->Time_FromTime(
-                    hours, mins, secs, usecs, rapidjson_timezone_utc,
+                    hours, mins, secs, usecs, timezone_utc,
                     PyDateTimeAPI->TimeType);
             else /* if (length == 14 || length == 18 || length == 21) */ {
                 int secsoffset = ((digit(length-5)*10 + digit(length-4)) * 3600
@@ -597,7 +597,7 @@ struct PyHandler {
                     value = NULL;
                 else {
                     PyObject* tz = PyObject_CallFunctionObjArgs(
-                        rapidjson_timezone_type, offset, NULL);
+                        timezone_type, offset, NULL);
                     Py_DECREF(offset);
                     if (tz == NULL)
                         value = NULL;
@@ -609,7 +609,7 @@ struct PyHandler {
 
                         if (value != NULL && datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
                             PyObject* asUTC = PyObject_CallMethodObjArgs(
-                                value, astimezone_name, rapidjson_timezone_utc, NULL);
+                                value, astimezone_name, timezone_utc, NULL);
 
                             Py_DECREF(value);
 
@@ -669,7 +669,7 @@ struct PyHandler {
             else if (length == 20 || length == 24 || length == 27)
                 value = PyDateTimeAPI->DateTime_FromDateAndTime(
                     year, month, day, hours, mins, secs, usecs,
-                    rapidjson_timezone_utc, PyDateTimeAPI->DateTimeType);
+                    timezone_utc, PyDateTimeAPI->DateTimeType);
             else /* if (length == 25 || length == 29 || length == 32) */ {
                 int secsoffset = ((digit(length-5)*10 + digit(length-4)) * 3600
                                   + (digit(length-2)*10 + digit(length-1)) * 60);
@@ -681,7 +681,7 @@ struct PyHandler {
                     value = NULL;
                 else {
                     PyObject* tz = PyObject_CallFunctionObjArgs(
-                        rapidjson_timezone_type, offset, NULL);
+                        timezone_type, offset, NULL);
                     Py_DECREF(offset);
                     if (tz == NULL)
                         value = NULL;
@@ -693,7 +693,7 @@ struct PyHandler {
 
                         if (value != NULL && datetimeMode & DATETIME_MODE_SHIFT_TO_UTC) {
                             PyObject* asUTC = PyObject_CallMethodObjArgs(
-                                value, astimezone_name, rapidjson_timezone_utc, NULL);
+                                value, astimezone_name, timezone_utc, NULL);
 
                             Py_DECREF(value);
 
@@ -744,7 +744,7 @@ struct PyHandler {
         if (pystr == NULL)
             return false;
 
-        PyObject* value = PyObject_CallFunctionObjArgs(rapidjson_uuid_type, pystr, NULL);
+        PyObject* value = PyObject_CallFunctionObjArgs(uuid_type, pystr, NULL);
         Py_DECREF(pystr);
 
         if (value == NULL)
@@ -769,7 +769,7 @@ struct PyHandler {
 
 
 static PyObject*
-rapidjson_loads(PyObject* self, PyObject* args, PyObject* kwargs)
+loads(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     /* Converts a JSON encoded string to a Python object. */
 
@@ -1007,7 +1007,7 @@ static const int MAX_RECURSION_DEPTH = 2048;
 
 template<typename WriterT, typename BufferT>
 static PyObject*
-rapidjson_dumps_internal(
+dumps_internal(
     WriterT* writer,
     BufferT* buf,
     PyObject* value,
@@ -1061,7 +1061,7 @@ rapidjson_dumps_internal(
             writer->Bool(object == Py_True);
         }
         else if (useDecimal
-                 && (isDec = PyObject_IsInstance(object, rapidjson_decimal_type))) {
+                 && (isDec = PyObject_IsInstance(object, decimal_type))) {
             if (isDec == -1)
                 return NULL;
 
@@ -1256,8 +1256,7 @@ rapidjson_dumps_internal(
 
                             asUTC = PyDateTimeAPI->DateTime_FromDateAndTime(
                                 year, month, day, hour, min, sec, microsec,
-                                rapidjson_timezone_utc,
-                                PyDateTimeAPI->DateTimeType);
+                                timezone_utc, PyDateTimeAPI->DateTimeType);
                         } else {
                             hour = PyDateTime_TIME_GET_HOUR(dtObject);
                             min = PyDateTime_TIME_GET_MINUTE(dtObject);
@@ -1265,8 +1264,7 @@ rapidjson_dumps_internal(
                             microsec = PyDateTime_TIME_GET_MICROSECOND(dtObject);
                             asUTC = PyDateTimeAPI->Time_FromTime(
                                 hour, min, sec, microsec,
-                                rapidjson_timezone_utc,
-                                PyDateTimeAPI->TimeType);
+                                timezone_utc, PyDateTimeAPI->TimeType);
                         }
 
                         if (asUTC == NULL) {
@@ -1285,7 +1283,7 @@ rapidjson_dumps_internal(
                         // If it's not already in UTC, shift the value
                         if (PyObject_IsTrue(utcOffset)) {
                             asUTC = PyObject_CallMethodObjArgs(object, astimezone_name,
-                                                               rapidjson_timezone_utc, NULL);
+                                                               timezone_utc, NULL);
 
                             if (asUTC == NULL) {
                                 Py_DECREF(utcOffset);
@@ -1432,8 +1430,7 @@ rapidjson_dumps_internal(
                 if (datetimeMode & (DATETIME_MODE_SHIFT_TO_UTC | DATETIME_MODE_NAIVE_IS_UTC))
                     midnightObj = PyDateTimeAPI->DateTime_FromDateAndTime(
                         year, month, day, 0, 0, 0, 0,
-                        rapidjson_timezone_utc,
-                        PyDateTimeAPI->DateTimeType);
+                        timezone_utc, PyDateTimeAPI->DateTimeType);
                 else
                     midnightObj = PyDateTime_FromDateAndTime(year, month, day, 0, 0, 0, 0);
 
@@ -1460,7 +1457,7 @@ rapidjson_dumps_internal(
             }
         }
         else if (uuidMode != UUID_MODE_NONE
-                 && PyObject_TypeCheck(object, (PyTypeObject *) rapidjson_uuid_type)) {
+                 && PyObject_TypeCheck(object, (PyTypeObject *) uuid_type)) {
             PyObject* retval;
             if (uuidMode == UUID_MODE_CANONICAL)
                 retval = PyObject_Str(object);
@@ -1497,8 +1494,8 @@ error:
 }
 
 
-#define RAPIDJSON_DUMPS_INTERNAL_CALL \
-    rapidjson_dumps_internal( \
+#define DUMPS_INTERNAL_CALL \
+    dumps_internal( \
         &writer, \
         &buf, \
         value, \
@@ -1514,7 +1511,7 @@ error:
 
 
 static PyObject*
-rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
+dumps(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     /* Converts a Python object to a JSON-encoded string. */
 
@@ -1711,31 +1708,31 @@ rapidjson_dumps(PyObject* self, PyObject* args, PyObject* kwargs)
         if (ensureAscii) {
             GenericStringBuffer<ASCII<> > buf;
             Writer<GenericStringBuffer<ASCII<> >, UTF8<>, ASCII<> > writer(buf);
-            return RAPIDJSON_DUMPS_INTERNAL_CALL;
+            return DUMPS_INTERNAL_CALL;
         }
         else {
             StringBuffer buf;
             Writer<StringBuffer> writer(buf);
-            return RAPIDJSON_DUMPS_INTERNAL_CALL;
+            return DUMPS_INTERNAL_CALL;
         }
     }
     else if (ensureAscii) {
         GenericStringBuffer<ASCII<> > buf;
         PrettyWriter<GenericStringBuffer<ASCII<> >, UTF8<>, ASCII<> > writer(buf);
         writer.SetIndent(indentChar, indentCharCount);
-        return RAPIDJSON_DUMPS_INTERNAL_CALL;
+        return DUMPS_INTERNAL_CALL;
     }
     else {
         StringBuffer buf;
         PrettyWriter<StringBuffer> writer(buf);
         writer.SetIndent(indentChar, indentCharCount);
-        return RAPIDJSON_DUMPS_INTERNAL_CALL;
+        return DUMPS_INTERNAL_CALL;
     }
 }
 
 
 static PyObject*
-rapidjson_get_defaults(PyObject* self)
+get_defaults(PyObject* self)
 {
     PyObject* res;
     PyObject* value;
@@ -1823,7 +1820,7 @@ error:
 
 
 static PyObject*
-rapidjson_set_defaults(PyObject* self, PyObject* args, PyObject* kwargs)
+set_defaults(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     PyObject* objectHook = defaultObjectHook;
     PyObject* useDecimalObj = NULL;
@@ -2046,25 +2043,25 @@ rapidjson_set_defaults(PyObject* self, PyObject* args, PyObject* kwargs)
 
 
 static PyMethodDef
-rapidjson_functions[] = {
-    {"loads", (PyCFunction) rapidjson_loads, METH_VARARGS | METH_KEYWORDS,
-     rapidjson_loads_docstring},
-    {"dumps", (PyCFunction) rapidjson_dumps, METH_VARARGS | METH_KEYWORDS,
-     rapidjson_dumps_docstring},
-    {"get_defaults", (PyCFunction) rapidjson_get_defaults, METH_NOARGS,
-     rapidjson_get_defaults_docstring},
-    {"set_defaults", (PyCFunction) rapidjson_set_defaults, METH_VARARGS | METH_KEYWORDS,
-     rapidjson_set_defaults_docstring},
+functions[] = {
+    {"loads", (PyCFunction) loads, METH_VARARGS | METH_KEYWORDS,
+     loads_docstring},
+    {"dumps", (PyCFunction) dumps, METH_VARARGS | METH_KEYWORDS,
+     dumps_docstring},
+    {"get_defaults", (PyCFunction) get_defaults, METH_NOARGS,
+     get_defaults_docstring},
+    {"set_defaults", (PyCFunction) set_defaults, METH_VARARGS | METH_KEYWORDS,
+     set_defaults_docstring},
     {NULL, NULL, 0, NULL} /* sentinel */
 };
 
 
-static PyModuleDef rapidjson_module = {
+static PyModuleDef module = {
     PyModuleDef_HEAD_INIT,
     "rapidjson",
-    rapidjson_module_docstring,
+    module_docstring,
     -1,
-    rapidjson_functions
+    functions
 };
 
 
@@ -2093,83 +2090,82 @@ PyInit_rapidjson()
     if (datetimeModule == NULL)
         return NULL;
 
-    rapidjson_timezone_type = PyObject_GetAttrString(datetimeModule, "timezone");
+    timezone_type = PyObject_GetAttrString(datetimeModule, "timezone");
     Py_DECREF(datetimeModule);
 
-    if (rapidjson_timezone_type == NULL)
+    if (timezone_type == NULL)
         return NULL;
 
-    rapidjson_timezone_utc = PyObject_GetAttrString(rapidjson_timezone_type, "utc");
-    if (rapidjson_timezone_utc == NULL) {
-        Py_DECREF(rapidjson_timezone_type);
+    timezone_utc = PyObject_GetAttrString(timezone_type, "utc");
+    if (timezone_utc == NULL) {
+        Py_DECREF(timezone_type);
         return NULL;
     }
 
     PyObject* uuidModule = PyImport_ImportModule("uuid");
     if (uuidModule == NULL) {
-        Py_DECREF(rapidjson_timezone_type);
-        Py_DECREF(rapidjson_timezone_utc);
+        Py_DECREF(timezone_type);
+        Py_DECREF(timezone_utc);
         return NULL;
     }
 
-    rapidjson_uuid_type = PyObject_GetAttrString(uuidModule, "UUID");
+    uuid_type = PyObject_GetAttrString(uuidModule, "UUID");
     Py_DECREF(uuidModule);
 
-    if (rapidjson_uuid_type == NULL) {
-        Py_DECREF(rapidjson_timezone_type);
-        Py_DECREF(rapidjson_timezone_utc);
+    if (uuid_type == NULL) {
+        Py_DECREF(timezone_type);
+        Py_DECREF(timezone_utc);
         return NULL;
     }
 
     PyObject* decimalModule = PyImport_ImportModule("decimal");
     if (decimalModule == NULL) {
-        Py_DECREF(rapidjson_timezone_type);
-        Py_DECREF(rapidjson_timezone_utc);
-        Py_DECREF(rapidjson_uuid_type);
+        Py_DECREF(timezone_type);
+        Py_DECREF(timezone_utc);
+        Py_DECREF(uuid_type);
         return NULL;
     }
 
-    rapidjson_decimal_type = PyObject_GetAttrString(decimalModule, "Decimal");
+    decimal_type = PyObject_GetAttrString(decimalModule, "Decimal");
     Py_DECREF(decimalModule);
 
-    if (rapidjson_decimal_type == NULL) {
-        Py_DECREF(rapidjson_timezone_type);
-        Py_DECREF(rapidjson_timezone_utc);
-        Py_DECREF(rapidjson_uuid_type);
+    if (decimal_type == NULL) {
+        Py_DECREF(timezone_type);
+        Py_DECREF(timezone_utc);
+        Py_DECREF(uuid_type);
         return NULL;
     }
 
-    PyObject* module;
+    PyObject* m;
 
-    module = PyModule_Create(&rapidjson_module);
-    if (module == NULL) {
-        Py_DECREF(rapidjson_timezone_type);
-        Py_DECREF(rapidjson_timezone_utc);
-        Py_DECREF(rapidjson_decimal_type);
-        Py_DECREF(rapidjson_uuid_type);
+    m = PyModule_Create(&module);
+    if (m == NULL) {
+        Py_DECREF(timezone_type);
+        Py_DECREF(timezone_utc);
+        Py_DECREF(decimal_type);
+        Py_DECREF(uuid_type);
         return NULL;
     }
 
-    PyModule_AddIntConstant(module, "DATETIME_MODE_NONE", DATETIME_MODE_NONE);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_ISO8601", DATETIME_MODE_ISO8601);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_UNIX_TIME", DATETIME_MODE_UNIX_TIME);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_ONLY_SECONDS", DATETIME_MODE_ONLY_SECONDS);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_IGNORE_TZ", DATETIME_MODE_IGNORE_TZ);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_NAIVE_IS_UTC", DATETIME_MODE_NAIVE_IS_UTC);
-    PyModule_AddIntConstant(module, "DATETIME_MODE_SHIFT_TO_UTC", DATETIME_MODE_SHIFT_TO_UTC);
+    PyModule_AddIntConstant(m, "DATETIME_MODE_NONE", DATETIME_MODE_NONE);
+    PyModule_AddIntConstant(m, "DATETIME_MODE_ISO8601", DATETIME_MODE_ISO8601);
+    PyModule_AddIntConstant(m, "DATETIME_MODE_UNIX_TIME", DATETIME_MODE_UNIX_TIME);
+    PyModule_AddIntConstant(m, "DATETIME_MODE_ONLY_SECONDS", DATETIME_MODE_ONLY_SECONDS);
+    PyModule_AddIntConstant(m, "DATETIME_MODE_IGNORE_TZ", DATETIME_MODE_IGNORE_TZ);
+    PyModule_AddIntConstant(m, "DATETIME_MODE_NAIVE_IS_UTC", DATETIME_MODE_NAIVE_IS_UTC);
+    PyModule_AddIntConstant(m, "DATETIME_MODE_SHIFT_TO_UTC", DATETIME_MODE_SHIFT_TO_UTC);
 
-    PyModule_AddIntConstant(module, "UUID_MODE_NONE", UUID_MODE_NONE);
-    PyModule_AddIntConstant(module, "UUID_MODE_HEX", UUID_MODE_HEX);
-    PyModule_AddIntConstant(module, "UUID_MODE_CANONICAL", UUID_MODE_CANONICAL);
+    PyModule_AddIntConstant(m, "UUID_MODE_NONE", UUID_MODE_NONE);
+    PyModule_AddIntConstant(m, "UUID_MODE_HEX", UUID_MODE_HEX);
+    PyModule_AddIntConstant(m, "UUID_MODE_CANONICAL", UUID_MODE_CANONICAL);
 
-    PyModule_AddIntConstant(module, "NUMBER_MODE_NONE", NUMBER_MODE_NONE);
-    PyModule_AddIntConstant(module, "NUMBER_MODE_NATIVE", NUMBER_MODE_NATIVE);
+    PyModule_AddIntConstant(m, "NUMBER_MODE_NONE", NUMBER_MODE_NONE);
+    PyModule_AddIntConstant(m, "NUMBER_MODE_NATIVE", NUMBER_MODE_NATIVE);
 
-    PyModule_AddStringConstant(module, "__version__", PYTHON_RAPIDJSON_VERSION);
-    PyModule_AddStringConstant(
-        module,
-        "__author__",
-        PYTHON_RAPIDJSON_AUTHOR " <" PYTHON_RAPIDJSON_AUTHOR_EMAIL ">");
+    PyModule_AddStringConstant(m, "__version__", PYTHON_RAPIDJSON_VERSION);
+    PyModule_AddStringConstant(m, "__author__",
+                               PYTHON_RAPIDJSON_AUTHOR " <"
+                               PYTHON_RAPIDJSON_AUTHOR_EMAIL ">");
 
-    return module;
+    return m;
 }
