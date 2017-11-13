@@ -163,6 +163,18 @@ def test_constants(dumps, loads):
         assert loads(dumps({'a': c}))['a'] is c
 
 
+@pytest.mark.unit
+def test_iterables(dumps):
+    assert dumps(iter("abc")) == '["a","b","c"]'
+
+    def gen():
+        yield 1
+        yield 2
+        yield 3
+
+    assert dumps(gen()) == '[1,2,3]'
+
+
 # TODO: Figure out what we want to do here
 bad_tests = """
 @pytest.mark.unit
