@@ -2024,6 +2024,33 @@ dumps_internal(
             stack.push_back(WriterContext(NULL, 0, NULL, false, currentLevel, retval));
             stack.push_back(WriterContext(NULL, 0, retval, false, currentLevel));
         }
+        else if (PyIter_Check(object)) {
+            PyObject* iterator = PyObject_GetIter(object);
+            if (iterator == NULL)
+                goto error;
+
+            std::vector<PyObject*> items;
+            PyObject* item;
+            while ((item = PyIter_Next(iterator))) {
+                items.push_back(item);
+            }
+
+            Py_DECREF(iterator);
+
+            // PyIter_Next() may exit with an error
+            if (PyErr_Occurred())
+                goto error;
+
+            writer->StartArray();
+            stack.push_back(WriterContext(NULL, 0, NULL, false, currentLevel));
+
+            std::vector<PyObject*>::const_reverse_iterator riter = items.rbegin();
+            for (; riter != items.rend(); ++riter) {
+                // Decref the return value once it's done being dumped to a string.
+                stack.push_back(WriterContext(NULL, 0, NULL, false, nextLevel, *riter));
+                stack.push_back(WriterContext(NULL, 0, *riter, false, nextLevel));
+            }
+        }
         else if (defaultFn) {
             PyObject* retval = PyObject_CallFunctionObjArgs(defaultFn, object, NULL);
             if (retval == NULL)
