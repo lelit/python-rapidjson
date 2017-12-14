@@ -29,6 +29,12 @@ def test_base_values(value, dumps, loads):
 
 
 @pytest.mark.unit
+def test_tuple(dumps):
+    obj = [1, 2, 'a', 1.2, {'foo': 'bar'},]
+    assert dumps(obj) == dumps(tuple(obj))
+
+
+@pytest.mark.unit
 def test_bytes_value(dumps):
     dumped = dumps(b'cruel\x00world')
     assert dumped == r'"cruel\u0000world"'
