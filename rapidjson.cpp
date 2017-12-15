@@ -1993,9 +1993,11 @@ dumps_internal(
         PyObject* item;
         while ((item = PyIter_Next(iterator))) {
             if (!RECURSE(item)) {
+                Py_DECREF(item);
                 Py_DECREF(iterator);
                 return false;
             }
+            Py_DECREF(item);
         }
 
         Py_DECREF(iterator);
